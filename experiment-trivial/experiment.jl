@@ -8,7 +8,6 @@
 # f_2(mu) = N(mu | u, t⁻¹)
 #
 # with
-# q(x) = N(x | m_x, V_x)
 # q(mu) = N(mu | m_mu, V_mu)
 #
 # We want the node f_1 to appropriately react to incoming messages.
