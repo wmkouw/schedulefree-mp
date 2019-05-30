@@ -19,10 +19,11 @@ using Printf
 using Distributions
 using Plots
 
+import nodes: node_gaussian
+import edges: edge_gaussian, edge_delta
+
 # Import functions
 include("gen_data.jl")
-include("free_energies.jl")
-include("update_rules.jl")
 
 # Prefixes for saving files
 vizprf = pwd() * "/viz/"
@@ -54,36 +55,29 @@ if viz
     scatter!(y, color="red", label="observations")
 end
 
-# Initialize recognition distribution
-q(x) = Normal(0,1)
+## Construct a time-slice of an FFG
 
-# Preallocate arrays
-Fqx = zeros(1, T)
-Fqmu = zeros(1, T)
+# Initial state
+x0 = edge(observed=false)
 
-# Loop over time-slices
 for t = 1:T
 
-    # Messages to edge x
-    nu0 = nu_f0x(x_hat)
-    nu1 = nu_f1x(m_mu[i-1], sigma)
+    # Previous state edge
+    xt_min = xt
 
-    # Update q(x)
-    m_x[i], V_x[i] = update_qx(m_x[i-1], V_x[i-1], nu0, nu1, observed=true)
+    # Transition node
+    ft = node_gaussian(mean=A*xt_1, variance=Q, xt)
 
-    # Compute free energy of edge x
-    Fqx[i] = Fq_x(m_x[i], V_x[i], m_mu[i-1], V_mu[i-1], sigma)
-    DFqx[i] = DFq_x(m_x[i], V_x[i], m_x[i-1], V_x[i-1], m_mu[i-1], V_mu[i-1], sigma)
+    # New state edge
+    xt = edge_gaussian(ft-1, ft, observed=false)
 
-    # Messages to edge mu
-    nu2 = nu_f1mu(m_x[i], sigma)
-    nu3 = nu_f2mu(u, s)
+    # Observation node
+    gt = node_gaussian(mean=H*xt, variance=R, yt)
 
-    # Update q(mu)
-    m_mu[i], V_mu[i] = update_qmu(m_mu[i-1], V_mu[i-1], nu2, nu3)
+    # Data point edge
+    yt = edge_delta(y[t])
 
-    # Compute free energy of edge mu
-    Fqmu[i] = Fq_mu(m_mu[i], V_mu[i], m_x[i], V_x[i], sigma, u, s)
-    DFqmu[i] = DFq_mu(m_mu[i], V_mu[i], m_mu[i-1], V_mu[i-1], m_x[i], V_x[i], sigma, u, s)
+    # Pass messages around
+    pass()
 
 end
