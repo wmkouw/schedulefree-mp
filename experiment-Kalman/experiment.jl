@@ -19,10 +19,12 @@ using Printf
 using Distributions
 using Plots
 
-import nodes: node_gaussian
-import edges: edge_gaussian, edge_delta
+# Factor graph components
+include("../nodes/node_gaussian.jl")
+include("../edges/edge_gaussian.jl")
+include("../edges/edge_delta.jl")
 
-# Import functions
+# Data
 include("gen_data.jl")
 
 # Prefixes for saving files
@@ -47,7 +49,7 @@ m0 = 0.
 V0 = 1.
 
 # Generate data
-y, x = gen_data_randomwalk(Q, R, T, m0, V0)
+observed, hidden = gen_data_randomwalk(Q, R, T, m0, V0)
 
 # Plot generated data
 if viz  
@@ -55,29 +57,60 @@ if viz
     scatter!(y, color="red", label="observations")
 end
 
-## Construct a time-slice of an FFG
+## Pass through FFG on a time-slice basis
 
 # Initial state
-x0 = edge(observed=false)
+x_t = EdgeGaussian(mean=m0, 
+                   precision=V0, 
+                   id="x0", 
+                   node_l=Nothing, 
+                   node_r="f1",
+                   node_b=Nothing)
 
 for t = 1:T
 
-    # Previous state edge
-    xt_min = xt
+    """Construct FFG time-slice"""
+
+    # Edge x_t becomes edge x_t-1
+    x_tmin1 = x_t 
 
     # Transition node
-    ft = node_gaussian(mean=A*xt_1, variance=Q, xt)
+    ft = NodeGaussian(var=x_t,
+                     mean=A*x_tmin1.params["mean"], 
+                     precision=Q,
+                     id="f"*string(t),
+                     edge0="x"*string(t-1),
+                     edge1="x"*string(t))
 
     # New state edge
-    xt = edge_gaussian(ft-1, ft, observed=false)
+    xt = EdgeGaussian(mean=x_tmin1.params["mean"], 
+                      precision=x_tmin1.params["precision"],
+                      id="e"*string(t), 
+                      node_l="f"*string(t), 
+                      node_r="f"*string(t+1),
+                      node_b="g"*string(t))
 
     # Observation node
-    gt = node_gaussian(mean=H*xt, variance=R, yt)
+    gt = NodeGaussian(var=y_t,
+                      mean=H*xt, 
+                      precision=R,
+                      id="g"*string(t),
+                      edge0="x"*string(t-1),
+                      edge1="y"*string(t))
 
     # Data point edge
-    yt = edge_delta(y[t])
+    y_t = EdgeDelta(data=observed[t],
+                    id="y"*string(t),
+                    node="g"*string(t))
 
-    # Pass messages around
-    pass()
+    # Start clock
+    while 1
 
+        tick(x_tmin1)
+        tick(ft)
+        tick(x_t)
+        tick(gt)
+        tick(y_t)
+        
+    end
 end
