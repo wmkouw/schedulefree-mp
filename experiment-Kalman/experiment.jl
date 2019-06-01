@@ -75,12 +75,12 @@ for t = 1:T
     x_tmin1 = x_t 
 
     # Transition node
-    ft = NodeGaussian(var=x_t,
-                     mean=A*x_tmin1.params["mean"], 
-                     precision=Q,
-                     id="f"*string(t),
-                     edge0="x"*string(t-1),
-                     edge1="x"*string(t))
+    ft = NodeGaussian(rvar=x_t,
+                      mean=A*x_tmin1.params["mean"], 
+                      precision=Q,
+                      id="f"*string(t),
+                      edge0="x"*string(t-1),
+                      edge1="x"*string(t))
 
     # New state edge
     xt = EdgeGaussian(mean=x_tmin1.params["mean"], 
@@ -91,7 +91,7 @@ for t = 1:T
                       node_b="g"*string(t))
 
     # Observation node
-    gt = NodeGaussian(var=y_t,
+    gt = NodeGaussian(rvar=y_t,
                       mean=H*xt, 
                       precision=R,
                       id="g"*string(t),
@@ -106,11 +106,11 @@ for t = 1:T
     # Start clock
     while 1
 
-        tick(x_tmin1)
-        tick(ft)
-        tick(x_t)
-        tick(gt)
-        tick(y_t)
-        
+        react(x_tmin1)
+        react(ft)
+        react(x_t)
+        react(gt)
+        react(y_t)
+
     end
 end

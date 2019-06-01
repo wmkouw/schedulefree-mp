@@ -31,6 +31,7 @@ mutable struct EdgeGaussian
         # Check valid precision
         if precision <= 0
             throw("Exception: non-positive precision.")
+        end
 
         # Set recognition distribution parameters
         params["mean"] = mean
@@ -85,7 +86,7 @@ function message(edge::Type{EdgeGaussian})
     return (Normal(edge.params["mean"], edge.params["precision"]), edge.change_entropy)
 end
 
-function tick()
+function react()
     "Time progresses one tick and edge should act"
 
     ..

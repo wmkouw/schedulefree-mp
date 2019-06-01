@@ -1,20 +1,5 @@
 export EdgeDelta
 
-"""
-Description:
-
-    An edge with an observed value.
-
-    f(out) = δ(out - value)
-
-Interfaces:
-
-    1. out
-
-Construction:
-
-    EdgeDelta(out, value, id=:some_id)
-"""
 mutable struct EdgeDelta
     "
     Edge for an observation

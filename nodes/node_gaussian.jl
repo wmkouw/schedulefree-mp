@@ -1,68 +1,58 @@
 export NodeGaussian
 
-"""
-Description:
+using Distributions
 
-    A Gaussian with mean-precision parameterization:
-
-    f(out,m,w) = 𝒩(out|m,w) = (2π)^{-D/2} |w|^{1/2} exp(-1/2 (out - m)' w (out - m))
-
-Interfaces:
-
-    1. out
-    2. m (mean)
-    3. w (precision)
-
-Construction:
-
-    GaussianMeanPrecision(out, m, w, id=:some_id)
-"""
 mutable struct NodeGaussian
 
-    # Attributes: probability
-    var_data
-    param_mean
-    param_precision
-
     # Attributes: factor graph architecture
-    id
-    edge1_id
-    edge2_id
+    node_id::String
+    edge_data_id::String
+    edge_mean_id::String
 
-    function NodeGaussian()
-        return self
+    # Attributes: incoming messages
+    message_data::Type{Normal}
+    message_mean::Type{Normal}
+
+    # Attributes: matrices for Kalman filter
+    A::Float64
+    Q::Float64
+
+    function NodeGaussian(edge_data_id::String,
+                          edge_mean_id::String,
+                          transition::Float64,
+                          precision::Float64,
+                          id::String)
+        
+        # Set graph properties
+        node_id = id
+        edge_data_id = edge_data_id
+        edge_mean_id = edge_mean_id
+
+        # Transition matrix
+        A = transition
+        Q = precision
+
+        # Initialize messages
+        message_data = Normal(0, 1)
+        message_mean = Normal(0, 1)
     end
 end
 
-function receive_message_data(message)
-    "Store incoming message"
 
-    if istype(message, Delta)
-
-    elseif istype(message, Normal)
-
-    end
-
-    return Nothing
-end
-
-function receive_message_mean()
-    
-end
-
-function energy(q::RecognitionDistribution, p::GenerativeDistribution)
+function energy(node::Type{NodeGaussian})
     "Compute internal energy of node"
 
-    # Expectations
-    Em = mean(param_mean)
-    Ep = mean(param_precision)
+    # Expected mean
+    Em = node.A*mean(node.message_mean)
+
+    # Expected data
+    Ex = mean(node.message_data)
 
     # -log-likelihood of Gaussian with expected parameters
-    return -[-1/2.*log(2*Pi) + log(precision) - 1/2*(Ex - Em)'*EP*(Ex - Em)
+    return -[- 1/2 *log(2*pi) + log(node.Q) - 1/2 *(Ex - Em)'*node.Q*(Ex - Em)]
 
 end
 
-function react(DFE)
+function react()
     "Decide to react based on delta Free Energy"
-
 end
