@@ -5,14 +5,13 @@
 # Consider one time-slice of the model,
 # with the following nodes:
 #
-# f(x_t, x_t-1) = N(x_t, Ax_t-1, tau^-1)
-# g(y_t, x_t) = N(y_t | Bx_t, \gamma⁻¹)
+# f(x_t, x_t-1) = N(x_t | A x_t-1, Q)
+# g(y_t, x_t) = N(y_t | H x_t, R)
 #
 # with
-# q(x_t) = N(x | m_x, V_x)
-# q(mu) = N(mu | m_mu, V_mu)
+# q(x_t) = N(mt, Vt)
 #
-# We want the node f_1 to appropriately react to incoming messages.
+# Nodes should only react to incoming messages.
 
 using Revise
 using Printf
@@ -53,63 +52,66 @@ observed, hidden = gen_data_randomwalk(Q, R, T, m0, V0)
 
 # Plot generated data
 if viz  
-    plot(x, label="states")
-    scatter!(y, color="red", label="observations")
+    plot(hidden, label="states")
+    scatter!(observed, color="red", label="observations")
 end
 
 ## Pass through FFG on a time-slice basis
 
-# Initial state
+# Initialize variables
+z_t = EdgeGaussian()
+f_t = NodeGaussian()
+x_t = EdgeGaussian()
+g_t = NodeGaussian()
+y_t = EdgeDelta()
+
+# Initial state (t=0)
 x_t = EdgeGaussian(mean=m0, 
                    precision=V0, 
-                   id="x0", 
                    node_l=Nothing, 
-                   node_r="f1",
-                   node_b=Nothing)
+                   node_r=:f_t,
+                   node_b=Nothing,
+                   id="x0")
 
 for t = 1:T
 
-    """Construct FFG time-slice"""
-
-    # Edge x_t becomes edge x_t-1
-    x_tmin1 = x_t 
+    # Edge x_t becomes edge x_t-1 (= z_t)
+    z_t = x_t 
 
     # Transition node
-    ft = NodeGaussian(rvar=x_t,
-                      mean=A*x_tmin1.params["mean"], 
-                      precision=Q,
-                      id="f"*string(t),
-                      edge0="x"*string(t-1),
-                      edge1="x"*string(t))
+    f_t = NodeGaussian(edge_data_id=:x_t,
+                       edge_mean_id=:z_t,
+                       transition=A,
+                       precision=Q,
+                       id="f"*string(t))
 
     # New state edge
-    xt = EdgeGaussian(mean=x_tmin1.params["mean"], 
-                      precision=x_tmin1.params["precision"],
-                      id="e"*string(t), 
-                      node_l="f"*string(t), 
-                      node_r="f"*string(t+1),
-                      node_b="g"*string(t))
+    x_t = EdgeGaussian(mean=z_t.params["mean"], 
+                       precision=z_t.params["precision"], 
+                       node_l=:f_t, 
+                       node_r=:f_t,
+                       node_b=:g_t,
+                       id="x"*string(t))
 
     # Observation node
-    gt = NodeGaussian(rvar=y_t,
-                      mean=H*xt, 
-                      precision=R,
-                      id="g"*string(t),
-                      edge0="x"*string(t-1),
-                      edge1="y"*string(t))
+    g_t = NodeGaussian(edge_data_id=:y_t,
+                       edge_mean_id=:x_t,
+                       transition=H,
+                       precision=R,
+                       id="g"*string(t))
 
     # Data point edge
     y_t = EdgeDelta(data=observed[t],
-                    id="y"*string(t),
-                    node="g"*string(t))
+                    node=:g_t,
+                    id="y"*string(t))
 
     # Start clock
-    while 1
+    for tt = 1:10
 
-        react(x_tmin1)
-        react(ft)
+        react(z_t)
+        react(f_t)
         react(x_t)
-        react(gt)
+        react(g_t)
         react(y_t)
 
     end

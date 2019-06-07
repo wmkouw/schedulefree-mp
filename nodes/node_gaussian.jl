@@ -1,40 +1,41 @@
 export NodeGaussian
 
-using Distributions
+using Distributions: Normal
+using DataStructures: Queue, enqueue!, dequeue!
 
 mutable struct NodeGaussian
 
     # Attributes: factor graph architecture
-    node_id::String
-    edge_data_id::String
-    edge_mean_id::String
+    id::String
+    edges::Dict{String, Symbol}
 
-    # Attributes: incoming messages
-    message_data::Type{Normal}
-    message_mean::Type{Normal}
+    # List of messages
+    messages::Dict{String, Queue{Normal}}
 
     # Attributes: matrices for Kalman filter
     A::Float64
     Q::Float64
 
-    function NodeGaussian(edge_data_id::String,
-                          edge_mean_id::String,
+    function NodeGaussian(edge_data_id::Symbol,
+                          edge_mean_id::Symbol,
                           transition::Float64,
                           precision::Float64,
                           id::String)
+
+        # Connect node to specific edges
+        edges = Dict{String, Symbol}("data" => edge_data_id, "mean" => edge_mean_id)
+
+        # Keep track of incoming messages
+        messages = Dict{String, Queue{Normal}}("data" => Queue{Normal}(), "mean" => Queue{Normal}())
         
-        # Set graph properties
-        node_id = id
-        edge_data_id = edge_data_id
-        edge_mean_id = edge_mean_id
+        # Create instance
+        self = new(id, edges, messages)
 
         # Transition matrix
-        A = transition
-        Q = precision
+        self.A = transition;
+        self.Q = precision;
 
-        # Initialize messages
-        message_data = Normal(0, 1)
-        message_mean = Normal(0, 1)
+        return self
     end
 end
 
@@ -43,10 +44,10 @@ function energy(node::Type{NodeGaussian})
     "Compute internal energy of node"
 
     # Expected mean
-    Em = node.A*mean(node.message_mean)
+    Em = node.A*node.edges["mean"].params[1]
 
     # Expected data
-    Ex = mean(node.message_data)
+    Ex = node.edges["data"].params[1]
 
     # -log-likelihood of Gaussian with expected parameters
     return -[- 1/2 *log(2*pi) + log(node.Q) - 1/2 *(Ex - Em)'*node.Q*(Ex - Em)]
@@ -55,4 +56,7 @@ end
 
 function react()
     "Decide to react based on delta Free Energy"
+
+    # Check for incoming messages
+    
 end
