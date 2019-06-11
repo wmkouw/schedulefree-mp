@@ -12,34 +12,34 @@ mutable struct EdgeGaussian
     change_entropy::Float64
 
     # Messages
-    messages = Dict{String, Normal}
+    messages::Dict{String, Normal}
     new_messages::Dict{String, Queue{Normal}}
 
     # Factor graph properties
     nodes::Dict{String, Symbol}
+    state_type::String
     id::Symbol
 
     function EdgeGaussian(mean::Float64, 
                           precision::Float64, 
-                          id::String, 
-                          node_l::Symbol, 
-                          node_r::Symbol,
-                          node_b::Symbol)
+                          state_type::String,
+                          nodes::Dict{String,Symbol},
+                          id::String)
 
         # Check valid precision
         if precision <= 0
             throw("Exception: non-positive precision.")
         end
 
+        # TODO: check keys of node dictionary (valid={"left", "right", "bottom"})
+
         # Set recognition distribution parameters
         params = Dict{String, Float64}("mean" => mean, "precision" => precision)
 
         # Initial change in entropy
         change_entropy = Inf
-        
-        # Categorize nodes
-        nodes = Dict{String, Symbol}("left" => node_l, "right" => node_r, "below" => node_b)
 
+        # Construct instance
         self = new(id, nodes, messages, params, change_entropy)
         return self
     end
@@ -84,13 +84,21 @@ end
 function act(edge::Type{EdgeGaussian}, message)
     "Outgoing message is updated variational parameters"
 
-    # Put message in queue of connecting nodes
-    enqueue!(edge.nodes["left"].new_messages["mean"], message)
-    enqueue!(edge.nodes["bottom"].new_messages["mean"], message)
+        # State type determines which nodes are connected
+        if edge.state_type == "previous"
 
-    # TODO: right node is not connected
-    enqueue!(edge.nodes["right"].new_messages["mean"], message)
+            # Put message in queue of connecting nodes
+            enqueue!(edge.nodes["right"].new_messages, (message, "mean"))
 
+        elseif edge.state_type == "current"
+            
+            # Put message in queue of connecting nodes
+            enqueue!(edge.nodes["left"].new_messages, (message, "mean"))
+            enqueue!(edge.nodes["bottom"].new_messages, (message, "mean"))
+
+        else
+            throw("Exception: state_type unknown.")
+        end
     return Nothing
 end
 
