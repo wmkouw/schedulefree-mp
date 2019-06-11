@@ -51,7 +51,7 @@ W0 = 1.
 observed, hidden = gen_data_randomwalk(Q, R, T, m0, W0)
 
 # Plot generated data
-if viz  
+if viz
     plot(hidden, label="states")
     scatter!(observed, color="red", label="observations")
 end
@@ -59,46 +59,34 @@ end
 ## Pass through FFG on a time-slice basis
 
 # Initial state prior
-x_t = EdgeGaussian(mean=m0, 
-                   precision=W0,
-                   state_type="current",
-                   nodes=Dict{String, Symbol}(),
-                   id="x_0")
+x_t = EdgeGaussian(m0, W0, "current", Dict{String, Symbol}(), "x_0")
 
 for t = 1:T
 
     # Previous state
-    z_t = EdgeGaussian(mean=x_t.params["mean"], 
-                       precision=x_t.params["precision"], 
-                       state_type="previous",
-                       nodes=Dict{String, Symbol}("right" => :f_t),
-                       id="z_"*string(t))
+    z_t = EdgeGaussian(x_t.params["mean"],
+                       x_t.params["precision"],
+                       "previous",
+                       Dict{String, Symbol}("right" => :f_t),
+                       "z_"*string(t))
 
     # State transition node
-    f_t = NodeGaussian(edge_data_id=:x_t,
-                       edge_mean_id=:z_t,
-                       transition=A,
-                       precision=Q,
-                       id="f_"*string(t))
+    f_t = NodeGaussian(:x_t, :z_t, A, Q, "f_"*string(t))
 
     # New state edge
-    x_t = EdgeGaussian(mean=z_t.params["mean"], 
-                       precision=z_t.params["precision"], 
-                       state_type="current",
-                       nodes=Dict{String, Symbol}("left" => :f_t, "bottom" => :gt),
-                       id="x_"*string(t))
+    x_t = EdgeGaussian(z_t.params["mean"],
+                       z_t.params["precision"],
+                       "current",
+                       Dict{String, Symbol}("left" => :f_t, "bottom" => :g_t),
+                       "x_"*string(t))
 
     # Observation node
-    g_t = NodeGaussian(edge_data_id=:y_t,
-                       edge_mean_id=:x_t,
-                       transition=H,
-                       precision=R,
-                       id="g_"*string(t))
+    g_t = NodeGaussian(:y_t, :x_t, H, R, "g_"*string(t))
 
     # Observation edge
-    y_t = EdgeDelta(data=observed[t],
-                    node=:g_t,
-                    id="y_"*string(t))
+    y_t = EdgeDelta(observed[t],
+                    Dict{String, Symbol}("top" => :g_t),
+                    "y_"*string(t))
 
     # Start clock
     for tt = 1:10

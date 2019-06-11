@@ -1,6 +1,6 @@
 export EdgeGaussian
 
-using Distributions: Normal, mean, std
+using Distributions: Normal, mean, std, params
 using DataStructures: Queue, enqueue!, dequeue!
 
 mutable struct EdgeGaussian
@@ -11,19 +11,19 @@ mutable struct EdgeGaussian
     params::Dict{String, Float64}
     change_entropy::Float64
 
-    # Messages
+    # Message bookkeeping
     messages::Dict{String, Normal}
     new_messages::Dict{String, Queue{Normal}}
 
     # Factor graph properties
     nodes::Dict{String, Symbol}
     state_type::String
-    id::Symbol
+    id::String
 
-    function EdgeGaussian(mean::Float64, 
-                          precision::Float64, 
+    function EdgeGaussian(mean::Float64,
+                          precision::Float64,
                           state_type::String,
-                          nodes::Dict{String,Symbol},
+                          nodes::Dict{String, Symbol},
                           id::String)
 
         # Check valid precision
@@ -39,25 +39,29 @@ mutable struct EdgeGaussian
         # Initial change in entropy
         change_entropy = Inf
 
+        # Initialize messages
+        messages = Dict{String, Normal}("data" => Normal(0.0, 1.0),
+                                        "mean" => Normal(0.0, 1.0))
+
+        # Initialize new message queue
+        new_messages = Dict{String, Queue{Normal}}("data" => Queue{Normal}(),
+                                                   "mean" => Queue{Normal}())
+
         # Construct instance
-        self = new(id, nodes, messages, params, change_entropy)
+        self = new(params, change_entropy, messages, new_messages, nodes, state_type, id)
         return self
     end
 end
 
-function update(edge::Type{EdgeGaussian}, message_left, message_right)
+function update(edge::EdgeGaussian, message_left::Normal, message_right::Normal)
     "Update recognition distribution as the product of messages"
 
     # Compute entropy of edge before update
     entropy_old = entropy(edge)
 
-    # Means
-    mean_l = message_left.params["mean"]
-    mean_r = message_right.params["mean"]
-
-    # Precisions
-    precision_l = message_left.params["precision"]
-    precision_r = message_right.params["precision"]
+    # Extract parameters of messages
+    mean_l, precision_l = params(message_left)
+    mean_r, precision_r = params(message_right)
 
     # Update variational parameters
     precision = (precision_l + precision_r)
@@ -73,28 +77,35 @@ function update(edge::Type{EdgeGaussian}, message_left, message_right)
     # Store change in entropy
     edge.change_entropy = entropy_old - entropy_new
 
-    return Nothing 
+    return Nothing
 end
 
-function entropy(edge::Type{EdgeGaussian})
+function message(edge::EdgeGaussian)
+    "Outgoing message"
+    return Normal(edge.params["mean"], edge.params["precision"])
+end
+
+function entropy(edge::EdgeGaussian)
     "Compute entropy of Gaussian distribution"
-    return log(2*pi)/2 + log(edge.params["precision"]^2)/2
+    return log(2*pi)/2 - log(edge.params["precision"])/2
 end
 
-function act(edge::Type{EdgeGaussian}, message)
+function act(edge::EdgeGaussian, message)
     "Outgoing message is updated variational parameters"
 
         # State type determines which nodes are connected
         if edge.state_type == "previous"
 
             # Put message in queue of connecting nodes
-            enqueue!(edge.nodes["right"].new_messages, (message, "mean"))
+            enqueue!(eval(edge.nodes["right"]).new_messages, (message, "mean"))
+            # TODO: avoid hard-coding node key
 
         elseif edge.state_type == "current"
-            
+
             # Put message in queue of connecting nodes
-            enqueue!(edge.nodes["left"].new_messages, (message, "mean"))
-            enqueue!(edge.nodes["bottom"].new_messages, (message, "mean"))
+            enqueue!(eval(edge.nodes["left"]).new_messages, (message, "data"))
+            enqueue!(eval(edge.nodes["bottom"]).new_messages, (message, "mean"))
+            # TODO: avoid hard-coding node key
 
         else
             throw("Exception: state_type unknown.")
@@ -102,7 +113,7 @@ function act(edge::Type{EdgeGaussian}, message)
     return Nothing
 end
 
-function react(edge::Type{EdgeGaussian})
+function react(edge::EdgeGaussian)
     "React to incoming messages"
 
     # Check lengths of queues
@@ -136,8 +147,7 @@ function react(edge::Type{EdgeGaussian})
     end
 
     # Message from edge to nodes
-    message = Normal(edge.params["mean"], edge.params["precision"])
-    act(edge, message)
+    act(edge, message(edge))
 
     return Nothing
 end

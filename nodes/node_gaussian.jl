@@ -1,60 +1,61 @@
 export NodeGaussian
 
-using Distributions: Normal
+using Distributions: Normal, params
 using DataStructures: Queue, enqueue!, dequeue!
 
 mutable struct NodeGaussian
 
-    # Attributes: factor graph architecture
+    # Factor graph properties
     id::String
     edges::Dict{String, Symbol}
 
-    # List of messages
-    messages::Dict{String, Queue{Normal}}
+    # Message bookkeeping
+    messages::Dict{String, Normal}
     new_messages::Queue{Tuple}
 
-    # Spike threshold
-    threshold::Float64
-
-    # Attributes: matrices for Kalman filter
+    # Node properties
     transition::Float64
     precision::Float64
+    threshold::Float64
 
     function NodeGaussian(edge_data_id::Symbol,
                           edge_mean_id::Symbol,
                           transition::Float64,
                           precision::Float64,
-                          treshold::Float64,
-                          id::String)
+                          id::String;
+                          threshold=0.0001)
 
         # Connect node to specific edges
-        edges = Dict{String, Symbol}("data" => edge_data_id, 
+        edges = Dict{String, Symbol}("data" => edge_data_id,
                                      "mean" => edge_mean_id)
 
         # Keep track of incoming messages
-        messages = Dict{String, Queue{Normal}}("data" => Queue{Normal}(),
-                                               "mean" => Queue{Normal}())
-        
+        messages = Dict{String, Normal}("data" => Normal(0.0, 1.0),
+                                        "mean" => Normal(0.0, 1.0))
+
+        # Initialize new message queue
+        new_messages = Queue{Tuple}()
+
         # Create instance
         self = new(id, edges, messages, new_messages, transition, precision, threshold)
         return self
     end
 end
 
-function energy(node::Type{NodeGaussian})
+function energy(node::NodeGaussian)
     "Compute internal energy of node"
 
     # Expected mean
-    Em = node.transition * node.edges["mean"].params[1]
+    Em = node.transition * node.edges["mean"].params["mean"]
 
     # Expected data
-    Ex = node.edges["data"].params[1]
+    Ex = node.edges["data"].params["mean"]
 
     # -log-likelihood of Gaussian with expected parameters
     return 1/2 *log(2*pi) - log(node.precision) + 1/2 *(Ex - Em)'*node.precision*(Ex - Em)
 end
 
-function message(node::Type{NodeGaussian}, edge::String)
+function message(node::NodeGaussian, edge::String)
     "Compute outgoing message"
 
     if edge == "data"
@@ -80,7 +81,7 @@ function message(node::Type{NodeGaussian}, edge::String)
     return message
 end
 
-function act(node::Type{NodeGaussian}, edge::String)
+function act(node::NodeGaussian, edge::String)
     "Send out message for one of the connecting edges"
 
     if edge == "data"
@@ -108,7 +109,7 @@ function act(node::Type{NodeGaussian}, edge::String)
     return Nothing
 end
 
-function react(node::Type{NodeGaussian})
+function react(node::NodeGaussian)
     "Decide to react based on delta Free Energy"
 
     # Number of new messages
@@ -121,7 +122,7 @@ function react(node::Type{NodeGaussian})
 
         # Check current message
         message, edge = dequeue!(node.new_messages)
-        
+
         # Update edge
         node.edges[edge] = message
 
@@ -137,5 +138,5 @@ function react(node::Type{NodeGaussian})
         end
     end
 
-    return Nothing    
+    return Nothing
 end
