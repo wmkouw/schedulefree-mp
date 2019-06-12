@@ -17,13 +17,15 @@ mutable struct NodeGaussian
     transition::Float64
     precision::Float64
     threshold::Float64
+    verbose::Bool
 
     function NodeGaussian(edge_data_id::Symbol,
                           edge_mean_id::Symbol,
                           transition::Float64,
                           precision::Float64,
                           id::String;
-                          threshold=0.0001)
+                          threshold=0.0001,
+                          verbose=false)
 
         # Connect node to specific edges
         edges = Dict{String, Symbol}("data" => edge_data_id,
@@ -37,7 +39,7 @@ mutable struct NodeGaussian
         new_messages = Queue{Tuple}()
 
         # Create instance
-        self = new(id, edges, messages, new_messages, transition, precision, threshold)
+        self = new(id, edges, messages, new_messages, transition, precision, threshold, verbose)
         return self
     end
 end
@@ -46,10 +48,10 @@ function energy(node::NodeGaussian)
     "Compute internal energy of node"
 
     # Expected mean
-    Em = node.transition * node.edges["mean"].params["mean"]
+    Em = node.transition * eval(node.edges["mean"]).params["mean"]
 
     # Expected data
-    Ex = node.edges["data"].params["mean"]
+    Ex = eval(node.edges["data"]).params["mean"]
 
     # -log-likelihood of Gaussian with expected parameters
     return 1/2 *log(2*pi) - log(node.precision) + 1/2 *(Ex - Em)'*node.precision*(Ex - Em)
@@ -116,21 +118,25 @@ function react(node::NodeGaussian)
     num_new = length(node.new_messages)
 
     # Compute current internal energy
-    U_old = energy(node)
+    F_old = energy(node)
 
     for n = 1:num_new
 
         # Check current message
-        message, edge = dequeue!(node.new_messages)
+        message, entropy, edge = dequeue!(node.new_messages)
 
         # Update edge
-        node.edges[edge] = message
+        node.messages[edge] = message
 
         # New energy
-        U_new = energy(node)
+        F_new = energy(node) - entropy
 
         # Compute change in internal energy
-        dU = U_new - U_old
+        dF = abs(F_new - F_old)
+
+        if node.verbose
+            println("dU = "*string(dU))
+        end
 
         # Check if change in energy is sufficient to fire
         if dU > node.threshold

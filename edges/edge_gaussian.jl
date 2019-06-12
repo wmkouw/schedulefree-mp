@@ -90,6 +90,21 @@ function entropy(edge::EdgeGaussian)
     return log(2*pi)/2 - log(edge.params["precision"])/2
 end
 
+function free_energy(edge::EdgeGaussian)
+    "Compute free energy of edge and connecting nodes"
+
+    # Query nodes for energy
+    for key in keys(edge.nodes)
+        U = energy(eval(edge.nodes[key]))
+    end
+
+    # Compute own entropy
+    H = entropy(edge)
+
+    # Return FE
+    return U - H
+end
+
 function act(edge::EdgeGaussian, message)
     "Outgoing message is updated variational parameters"
 
