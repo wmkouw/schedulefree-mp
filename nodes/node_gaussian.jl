@@ -11,7 +11,7 @@ mutable struct NodeGaussian
 
     # Message bookkeeping
     messages::Dict{String, Normal}
-    new_messages::Queue{Tuple}
+    incoming_messages::Queue{Tuple{Normal{Float64},Float64,String}}
 
     # Node properties
     transition::Float64
@@ -19,27 +19,33 @@ mutable struct NodeGaussian
     threshold::Float64
     verbose::Bool
 
-    function NodeGaussian(edge_data_id::Symbol,
-                          edge_mean_id::Symbol,
+    function NodeGaussian(data_edge_id::Symbol,
+                          mean_edge_id::Symbol,
                           transition::Float64,
                           precision::Float64,
                           id::String;
                           threshold=0.0001,
                           verbose=false)
 
-        # Connect node to specific edges
-        edges = Dict{String, Symbol}("data" => edge_data_id,
-                                     "mean" => edge_mean_id)
+        # Edge id's
+        edges = Dict{String, Symbol}("data" => data_edge_id,
+                                     "mean" => mean_edge_id)
 
         # Keep track of incoming messages
-        messages = Dict{String, Normal}("data" => Normal(0.0, 1.0),
-                                        "mean" => Normal(0.0, 1.0))
+        messages = Dict{String, Normal}("data" => Normal(),
+                                        "mean" => Normal())
 
-        # Initialize new message queue
-        new_messages = Queue{Tuple}()
+        # Incoming messages consist of distributions, delta Free Energy, and edge id's
+        incoming_messages = Queue{Tuple{Normal{Float64},Float64,String}}()
 
         # Create instance
-        self = new(id, edges, messages, new_messages, transition, precision, threshold, verbose)
+        self = new(id, edges,
+                   messages,
+                   incoming_messages,
+                   transition,
+                   precision,
+                   threshold,
+                   verbose)
         return self
     end
 end
@@ -48,64 +54,65 @@ function energy(node::NodeGaussian)
     "Compute internal energy of node"
 
     # Expected mean
-    Em = node.transition * eval(node.edges["mean"]).params["mean"]
+    Em = node.transition * mean(node.messages["mean"])
 
     # Expected data
-    Ex = eval(node.edges["data"]).params["mean"]
+    Ex = mean(node.messages["data"])
 
     # -log-likelihood of Gaussian with expected parameters
     return 1/2 *log(2*pi) - log(node.precision) + 1/2 *(Ex - Em)'*node.precision*(Ex - Em)
 end
 
-function message(node::NodeGaussian, edge::String)
+function message(node::NodeGaussian, edge_id::String)
     "Compute outgoing message"
 
-    if edge == "data"
+    if edge_id == "data"
 
         # Expected mean
-        Em = node.transition * node.edges["mean"].params[1]
+        Em = node.transition * mean(node.messages["mean"])
 
         # Supply sufficient parameters for normal as output message
         message = Normal(Em, node.precision)
 
-    elseif edge == "mean"
+    elseif edge_id == "mean"
 
         # Expected data
-        Ex = node.edges["data"].params[1]
+        Ex = mean(node.messages["data"])
 
         # Supply sufficient parameters for normal as output message
         message = Normal(Ex, node.precision)
 
     else
-        throw("Exception: edge unknown.")
+        throw("Exception: edge id unknown.")
     end
 
     return message
 end
 
-function act(node::NodeGaussian, edge::String)
+function act(node::NodeGaussian, edge_id::String)
     "Send out message for one of the connecting edges"
 
-    if edge == "data"
+    # Compute message for a particular edge
+    outgoing_message = message(node, edge_id)
 
-        # TODO: hard-block when data edge is a delta dist
+    if node.edges[edge_id] == :x_t
+        #TODO: avoid hard-coding queue keys of edges
 
-        # Compute message for data parameter
-        message_data = message(node, "data")
+        # Push message in queue of connected edge
+        enqueue!(eval(node.edges[edge_id]).incoming_messages["left"], outgoing_message)
 
-        # Put message in queue of edge for data parameter
-        enqueue!(node.edge["data"].new_messages["data"], message_data)
+    elseif node.edges[edge_id] == :y_t
 
-    elseif edge == "mean"
+        # Push message in queue of connected edge
+        enqueue!(eval(node.edges[edge_id]).incoming_messages["top"], outgoing_message)
 
-        # Compute message for mean parameter
-        message_mean = message(node, "mean")
+    elseif node.edges[edge_id] == :z_t
 
-        # Put message in queue of edge for mean parameter
-        enqueue!(node.edge["mean"].new_messages["mean"], message_mean)
+        # Push message in queue of connected edge
+        enqueue!(eval(node.edges[edge_id]).incoming_messages["right"], outgoing_message)
 
     else
-        throw("Exception: edge unknown.")
+        throw("Exception: Unknown edge.")
     end
 
     return Nothing
@@ -114,33 +121,25 @@ end
 function react(node::NodeGaussian)
     "Decide to react based on delta Free Energy"
 
-    # Number of new messages
-    num_new = length(node.new_messages)
-
-    # Compute current internal energy
-    F_old = energy(node)
-
-    for n = 1:num_new
+    for n = 1:length(node.incoming_messages)
 
         # Check current message
-        message, entropy, edge = dequeue!(node.new_messages)
+        incoming_message, delta_free_energy, edge_in = dequeue!(node.incoming_messages)
 
         # Update edge
-        node.messages[edge] = message
+        node.messages[edge_in] = incoming_message
 
-        # New energy
-        F_new = energy(node) - entropy
-
-        # Compute change in internal energy
-        dF = abs(F_new - F_old)
-
+        # Report dFE
         if node.verbose
-            println("dU = "*string(dU))
+            println("dFE = "*string(delta_free_energy))
         end
 
         # Check if change in energy is sufficient to fire
-        if dU > node.threshold
-            act(node)
+        if abs(delta_free_energy) > node.threshold
+
+            for edge_out in setdiff(Set(keys(node.edges)), [edge_in])
+                act(node, edge_out)
+            end
         end
     end
 

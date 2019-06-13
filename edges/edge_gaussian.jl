@@ -9,11 +9,11 @@ mutable struct EdgeGaussian
     "
     # Recognition distribution parameters
     params::Dict{String, Float64}
-    change_entropy::Float64
+    free_energy::Float64
 
     # Message bookkeeping
     messages::Dict{String, Normal}
-    new_messages::Dict{String, Queue{Normal}}
+    incoming_messages::Dict{String, Queue{Normal}}
 
     # Factor graph properties
     nodes::Dict{String, Symbol}
@@ -24,7 +24,8 @@ mutable struct EdgeGaussian
                           precision::Float64,
                           state_type::String,
                           nodes::Dict{String, Symbol},
-                          id::String)
+                          id::String;
+                          free_energy=1e12)
 
         # Check valid precision
         if precision <= 0
@@ -34,30 +35,35 @@ mutable struct EdgeGaussian
         # TODO: check keys of node dictionary (valid={"left", "right", "bottom"})
 
         # Set recognition distribution parameters
-        params = Dict{String, Float64}("mean" => mean, "precision" => precision)
-
-        # Initial change in entropy
-        change_entropy = Inf
+        params = Dict{String, Float64}("mean" => mean,
+                                       "precision" => precision)
 
         # Initialize messages
-        messages = Dict{String, Normal}("data" => Normal(0.0, 1.0),
-                                        "mean" => Normal(0.0, 1.0))
+        messages = Dict{String, Normal}()
+        for key in keys(nodes)
+            messages[key] = Normal()
+        end
 
         # Initialize new message queue
-        new_messages = Dict{String, Queue{Normal}}("data" => Queue{Normal}(),
-                                                   "mean" => Queue{Normal}())
+        incoming_messages = Dict{String, Queue{Normal}}()
+        for key in keys(nodes)
+            incoming_messages[key] = Queue{Normal}()
+        end
 
         # Construct instance
-        self = new(params, change_entropy, messages, new_messages, nodes, state_type, id)
+        self = new(params,
+                   free_energy,
+                   messages,
+                   incoming_messages,
+                   nodes,
+                   state_type,
+                   id)
         return self
     end
 end
 
 function update(edge::EdgeGaussian, message_left::Normal, message_right::Normal)
     "Update recognition distribution as the product of messages"
-
-    # Compute entropy of edge before update
-    entropy_old = entropy(edge)
 
     # Extract parameters of messages
     mean_l, precision_l = params(message_left)
@@ -71,12 +77,6 @@ function update(edge::EdgeGaussian, message_left::Normal, message_right::Normal)
     edge.params["precision"] = precision
     edge.params["mean"] = mean
 
-    # Compute new entropy
-    entropy_new = entropy(edge)
-
-    # Store change in entropy
-    edge.change_entropy = entropy_old - entropy_new
-
     return Nothing
 end
 
@@ -87,15 +87,16 @@ end
 
 function entropy(edge::EdgeGaussian)
     "Compute entropy of Gaussian distribution"
-    return log(2*pi)/2 - log(edge.params["precision"])/2
+    return log(2*π * ℯ / edge.params["precision"])/2
 end
 
 function free_energy(edge::EdgeGaussian)
     "Compute free energy of edge and connecting nodes"
 
     # Query nodes for energy
+    U = 0
     for key in keys(edge.nodes)
-        U = energy(eval(edge.nodes[key]))
+        U += energy(eval(edge.nodes[key]))
     end
 
     # Compute own entropy
@@ -105,21 +106,29 @@ function free_energy(edge::EdgeGaussian)
     return U - H
 end
 
-function act(edge::EdgeGaussian, message)
+function act(edge::EdgeGaussian, out_message, delta_free_energy)
     "Outgoing message is updated variational parameters"
 
         # State type determines which nodes are connected
         if edge.state_type == "previous"
 
+            # Tuple of message, change in free energy of message and edge id
+            T = (out_message, delta_free_energy, "mean")
+
             # Put message in queue of connecting nodes
-            enqueue!(eval(edge.nodes["right"]).new_messages, (message, "mean"))
+            enqueue!(eval(edge.nodes["right"]).incoming_messages, T)
             # TODO: avoid hard-coding node key
 
         elseif edge.state_type == "current"
 
+            # Tuples of message, change in free energy of message and edge id
+            T_left = (out_message, delta_free_energy, "data")
+            T_bottom = (out_message, delta_free_energy, "mean")
+            # TODO: edge and node id's are confusing
+
             # Put message in queue of connecting nodes
-            enqueue!(eval(edge.nodes["left"]).new_messages, (message, "data"))
-            enqueue!(eval(edge.nodes["bottom"]).new_messages, (message, "mean"))
+            enqueue!(eval(edge.nodes["left"]).incoming_messages, T_left)
+            enqueue!(eval(edge.nodes["bottom"]).incoming_messages, T_bottom)
             # TODO: avoid hard-coding node key
 
         else
@@ -132,37 +141,41 @@ function react(edge::EdgeGaussian)
     "React to incoming messages"
 
     # Check lengths of queues
-    l1 = length(edge.new_messages["data"])
-    l2 = length(edge.new_messages["mean"])
+    l1 = length(edge.incoming_messages["left"])
+    l2 = length(edge.incoming_messages["bottom"])
 
     # Iterate through the longer queue until both queues are equally long
     for i = 1:abs(l1 - l2)
 
         if l1 > l2
-            edge.messages["data"] = dequeue!(edge.new_messages["data"])
+            edge.messages["left"] = dequeue!(edge.incoming_messages["left"])
         else
-            edge.messages["mean"] = dequeue!(edge.new_messages["mean"])
+            edge.messages["bottom"] = dequeue!(edge.incoming_messages["bottom"])
         end
 
         # Update variational distribution
-        update(edge, edge.messages["mean"], edge.messages["data"])
+        update(edge, edge.messages["left"], edge.messages["bottom"])
     end
 
     # Iterate through remaining messages
     for i = 1:min(l1, l2)
 
         # Pop incoming messages
-        edge.messages["mean"] = dequeue!(edge.new_messages["mean"])
-        edge.messages["data"] = dequeue!(edge.new_messages["data"])
+        edge.messages["left"] = dequeue!(edge.incoming_messages["left"])
+        edge.messages["bottom"] = dequeue!(edge.incoming_messages["bottom"])
 
         # Update variational distribution
-        update(edge, edge.messages["mean"], edge.messages["data"])
-
-        # TODO: track change in entropy
+        update(edge, edge.messages["left"], edge.messages["bottom"])
     end
 
+    # Compute delta free energy
+    delta_free_energy = free_energy(edge) - edge.free_energy
+
+    # Update edge's free energy
+    edge.free_energy = free_energy(edge)
+
     # Message from edge to nodes
-    act(edge, message(edge))
+    act(edge, message(edge), delta_free_energy)
 
     return Nothing
 end

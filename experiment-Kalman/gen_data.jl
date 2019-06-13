@@ -2,7 +2,7 @@ function gen_data_randomwalk(P, R, T, m0, V0)
     "Draw a time-series according to a generative model"
 
     # Dimensionality
-    d = size(A, 1)
+    d = size(P, 1)
 
     # Preallocate
     y = zeros(T, d)
@@ -23,7 +23,7 @@ function gen_data_randomwalk(P, R, T, m0, V0)
     return y, x
 end
 
-function gen_data_kalmanf(A, B, P, R, T, m0, V0)
+function gen_data_kalmanf(A, B, P, R, m0, V0; time_horizon=100)
     "Draw a time-series according to a generative model"
 
     # Dimensionality
@@ -36,7 +36,7 @@ function gen_data_kalmanf(A, B, P, R, T, m0, V0)
     # Initialize state
     x[1, :] = randn(d).*sqrt(V0) .+ m0
 
-    for t = 1:T
+    for t = 1:time_horizon
 
         # Evolve state
         x[t+1, :] = randn(d).*sqrt(P) + A*x[t, :]
