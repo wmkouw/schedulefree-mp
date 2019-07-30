@@ -1,6 +1,6 @@
 export NodeGaussian
 
-using Distributions: Normal, params
+using Distributions: Normal, params, mean
 using DataStructures: Queue, enqueue!, dequeue!
 
 mutable struct NodeGaussian

@@ -9,8 +9,7 @@
 # g(y_t, x_t) = N(y_t | H x_t, R)
 #
 # with
-# q(x_t) = N(mt, Vt)
-#
+# q(x_t) = N(m_t, V_t) #
 # Nodes should only react to incoming messages.
 
 using Revise
@@ -36,12 +35,12 @@ viz = true
 T = 100
 
 # Known transition and observation matrices
-transition_matrix = 0.8
+transition_matrix = 0.5
 emission_matrix = 1.0
 
 # Known noises
 transition_precision = 1.0
-emission_precision = 0.5
+emission_precision = 1.0
 
 # Parameters for state prior
 m0 = 0.00
@@ -83,11 +82,10 @@ for t = 1:T
                               transition_precision,
                               "f_"*string(t),
                               threshold=1e-6,
-                              verbose=true)
+                              verbose=false)
 
     # New state edge
-    global x_t = EdgeGaussian(z_t.params["mean"],
-                              z_t.params["precision"],
+    global x_t = EdgeGaussian(z_t.params["mean"], z_t.params["precision"],
                               "current",
                               Dict{String, Symbol}("left" => :f_t, "bottom" => :g_t),
                               "x_"*string(t))
@@ -98,24 +96,28 @@ for t = 1:T
                               emission_precision,
                               "g_"*string(t),
                               threshold=1e-6,
-                              verbose=true)
+                              verbose=false)
 
     # Observation edge
     global y_t = EdgeDelta(observed[t],
                            Dict{String, Symbol}("top" => :g_t),
                            "y_"*string(t))
 
-    # Start message routine
-    act(z_t, message(z_t), 1e12)
+   # Start message routine
+   act(z_t, message(z_t), 1e12)
 
     # Start clock
     for tt = 1:10
+
+        # U_old = energy(g_t)
+        pred_error_old = y_t.prediction_error
+
         react(f_t)
         react(x_t)
         react(g_t)
         react(y_t)
 
-        if (tt > 3) & (y_t.prediction_error < 1e-3)
+        if (tt > 1) & (pred_error_old - y_t.prediction_error < 1e-6)
             println("Stopped clock at iteration "*string(tt)*" for t = "*string(t))
             num_passes[t] = tt
             break
@@ -129,15 +131,16 @@ end
 
 # Visualize estimates
 if viz
-    plot(hidden, color="red", label="states")
+    plot(hidden[2:end], color="red", label="states")
     plot!(states_mean, color="blue", label="estimates")
-    plot!(states_mean, ribbon=[1/sqrt.(states_prec), 1/sqrt.(states_prec)],
-      linewidth = 2,
-      color="blue",
-      fillalpha = 0.2,
-      fillcolor = "blue", label="")
+    plot!(states_mean, ribbon=[100*1/sqrt.(states_prec), 100*1/sqrt.(states_prec)],
+          linewidth = 2,
+          color="blue",
+          fillalpha = 0.2,
+          fillcolor = "blue", label="")
     scatter!(observed, color="black", label="observations")
-    savefig(pwd()*"/experiment-Kalman/viz/state_estimates.png")
+    savefig(pwd()*"/experiment-KalmanF/viz/state_estimates.png")
 
-    # plot(num_passes, label="Number of clock ticks")
+    plot(num_passes, label="Number of clock ticks")
+    savefig(pwd()*"/experiment-KalmanF/viz/clock_ticks.png")
 end
