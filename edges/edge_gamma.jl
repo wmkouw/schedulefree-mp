@@ -1,6 +1,6 @@
 export EdgeGamma
 
-using Distributions: Gamma, mean, std, params
+using Distributions: Gamma, mean, params
 using DataStructures: Queue, enqueue!, dequeue!
 using SpecialFunctions: gamma, digamma
 
@@ -10,7 +10,7 @@ mutable struct EdgeGamma
     "
     # Recognition distribution parameters
     params::Dict{String, Float64}
-    free_energy::Float64
+    local_free_energy::Float64
 
     # Message bookkeeping
     messages::Dict{String, Gamma}
@@ -18,26 +18,25 @@ mutable struct EdgeGamma
 
     # Factor graph properties
     nodes::Dict{String, Symbol}
-    state_type::String
     id::String
 
-    function EdgeGamma(alpha::Float64,
-                       beta::Float64,
+    function EdgeGamma(shape::Float64,
+                       rate::Float64,
                        nodes::Dict{String, Symbol},
                        id::String;
-                       free_energy=1e12)
+                       local_free_energy=1e12)
 
         # Check valid parameters
-        if alpha < 0
-            throw("Exception: rate parameter should be larger than 1")
+        if shape < 0
+            throw("Exception: shape parameter should be larger than 0.")
         end
-        if beta < 0
-            throw("Exception: shape parameter should be larger than 0")
+        if rate < 0
+            throw("Exception: rate parameter should be larger than 0.")
         end
 
         # Set recognition distribution parameters
-        params = Dict{String, Float64}("alpha" => alpha,
-                                       "beta" => beta)
+        params = Dict{String, Float64}("shape" => shape,
+                                       "rate" => rate)
 
         # Initialize messages
         messages = Dict{String, Gamma}()
@@ -46,12 +45,11 @@ mutable struct EdgeGamma
         end
 
         # Initialize new message queue
-        incoming_messages = Dict{String, Queue{Gamma}}("left" => Queue{Gamma}(),
-                                                       "right" => Queue{Gamma}())
+        incoming_messages = Dict{String, Queue{Gamma}}("bottom" => Queue{Gamma}())
 
         # Construct instance
         self = new(params,
-                   free_energy,
+                   local_free_energy,
                    messages,
                    incoming_messages,
                    nodes,
@@ -68,21 +66,24 @@ function update(edge::EdgeGamma, message_left::Gamma, message_right::Gamma)
     alpha_r, beta_r = params(message_right)
 
     # Update attributes
-    edge.params["alpha"] = alpha_l + alpha_r - 1
-    edge.params["beta"] = beta_l + beta_r
+    edge.params["shape"] = alpha_l + alpha_r - 1
+    edge.params["rate"] = beta_l + beta_r
 
     return Nothing
 end
 
 function message(edge::EdgeGamma)
     "Outgoing message"
-    return Gamma(edge.params["alpha"], edge.params["beta"])
+    return Gamma(edge.params["shape"], edge.params["rate"])
 end
 
 function entropy(edge::EdgeGamma)
     "Compute entropy of Gamma distribution"
-    alpha = edge.params["alpha"]
-    beta = edge.params["beta"]
+
+    # Parameters
+    alpha = edge.params["shape"]
+    beta = edge.params["rate"]
+
     return alpha - log(beta) + log(gamma(alpha)) + (1-alpha)*digamma(alpha)
 end
 
@@ -145,10 +146,10 @@ function react(edge::EdgeGamma)
     end
 
     # Compute delta free energy
-    delta_free_energy = free_energy(edge) - edge.free_energy
+    delta_free_energy = free_energy(edge) - edge.local_free_energy
 
     # Update edge's free energy
-    edge.free_energy = free_energy(edge)
+    edge.local_free_energy = free_energy(edge)
 
     # Message from edge to nodes
     act(edge, message(edge), delta_free_energy)

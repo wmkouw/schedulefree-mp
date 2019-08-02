@@ -14,7 +14,7 @@ mutable struct "NodeGamma"
     messages::Dict{String, Gamma}
     incoming_messages::Queue{Tuple{Gamma{Float64},Float64,String}}
 
-    # Hyperparameters
+    # Parameters
     shape::Float64
     rate::Float64
 
@@ -30,10 +30,10 @@ mutable struct "NodeGamma"
                          verbose=false)
 
         # Edge id's
-        edges = Dict{String, Symbol}("outcomes" => outcomes_edge_id)
+        edges = Dict{String, Symbol}("outcome" => outcomes_edge_id)
 
         # Keep track of incoming messages
-        messages = Dict{String, Gamma}("outcomes" => Gamma())
+        messages = Dict{String, Gamma}("outcome" => Gamma())
 
         # Incoming messages consist of distributions, delta Free Energy, and edge id's
         incoming_messages = Queue{Tuple{Gamma{Float64}, Float64, String}}()
@@ -53,7 +53,7 @@ function energy(node::"NodeGamma")
     "Compute internal energy of node"
 
     # Expected mean
-    Ex = mean(node.messages["outcomes"])
+    Ex = mean(node.messages["outcome"])
 
     # Hyperparameters
     alpha = node.shape
@@ -107,6 +107,5 @@ function react(node::"NodeGamma")
             end
         end
     end
-
     return Nothing
 end

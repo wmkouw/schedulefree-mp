@@ -1,5 +1,6 @@
 using Test
 using Distributions: Normal, params
+using DataStructures: Queue, enqueue!, dequeue!
 
 include("../edges/edge_gaussian.jl")
 include("../nodes/node_gaussian.jl")
@@ -43,8 +44,6 @@ end
     new_mean, new_prec = params(message(x))
     @test new_prec == 5.0
     @test new_mean == 0.8
-
-    # TODO test invalid inputs
 end
 
 @testset "queue_message" begin
@@ -63,12 +62,9 @@ end
 
     x = EdgeGaussian(m0, W0, state_type, nodes, id)
     update(x, message_left, message_right)
-    act(x, message(x))
+    act(x, message(x), 1.0)
+    act(x, message(x), 1.0)
 
-    println(f)
-
-    @test dequeue!(f.new_messages) == (Normal(0.8, 5.0), "data")
-    @test dequeue!(g.new_messages) == (Normal(0.8, 5.0), "mean")
-
-    # TODO test invalid inputs
+    @test dequeue!(f.incoming_messages) == (Normal(0.8, 5.0), 1.0, "data")
+    @test dequeue!(g.incoming_messages) == (Normal(0.8, 5.0), 1.0, "mean")
 end

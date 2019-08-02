@@ -106,7 +106,7 @@ function free_energy(edge::EdgeGaussian)
     return U - H
 end
 
-function act(edge::EdgeGaussian, out_message, delta_free_energy)
+function act(edge::EdgeGaussian, out_message, delta_free_energy::Float64)
     "Outgoing message is updated variational parameters"
 
         # State type determines which nodes are connected
