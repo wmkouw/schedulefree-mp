@@ -8,23 +8,19 @@ mutable struct EdgeGaussian
     Edge with a Gaussian recognition distribution
     "
     # Recognition distribution parameters
-    params::Dict{String, Float64}
+    mean::Float64
+    precision::Float64
     free_energy::Float64
 
     # Message bookkeeping
     messages::Dict{String, Normal}
-    incoming_messages::Dict{String, Queue{Normal}}
 
-    # Factor graph properties
-    nodes::Dict{String, Symbol}
-    state_type::String
+    # Edge id in factor graph
     id::String
 
-    function EdgeGaussian(mean::Float64,
-                          precision::Float64,
-                          state_type::String,
-                          nodes::Dict{String, Symbol},
-                          id::String;
+    function EdgeGaussian(id;
+                          mean=0.0,
+                          precision=1.0,
                           free_energy=1e12)
 
         # Check valid precision
@@ -32,71 +28,61 @@ mutable struct EdgeGaussian
             throw("Exception: non-positive precision.")
         end
 
-        # TODO: check keys of node dictionary (valid={"left", "right", "bottom"})
-
-        # Set recognition distribution parameters
-        params = Dict{String, Float64}("mean" => mean,
-                                       "precision" => precision)
-
         # Initialize messages
         messages = Dict{String, Normal}()
-        for key in keys(nodes)
-            messages[key] = Normal()
-        end
-
-        # Initialize new message queue
-        incoming_messages = Dict{String, Queue{Normal}}()
-        for key in keys(nodes)
-            incoming_messages[key] = Queue{Normal}()
-        end
 
         # Construct instance
-        self = new(params,
-                   free_energy,
-                   messages,
-                   incoming_messages,
-                   nodes,
-                   state_type,
-                   id)
+        self = new(mean, precision, messages, id, free_energy)
         return self
     end
 end
 
-function update(edge::EdgeGaussian, message_left::Normal, message_right::Normal)
+function update(edge::EdgeGaussian)
     "Update recognition distribution as the product of messages"
 
-    # Extract parameters of messages
-    mean_l, precision_l = params(message_left)
-    mean_r, precision_r = params(message_right)
+    # Loop over stored messages
+    new_precision = 0
+    weighted_mean = 0
+    for key in keys(edge.messages)
+
+        # Extract parameters
+        mean, var = params(edge.messages[key])
+
+        # Sum over precisions
+        new_precision += inv(var)
+
+        # Compute weighted means
+        weighted_mean += inv(var)*mean
+    end
 
     # Update variational parameters
-    precision = (precision_l + precision_r)
-    mean = inv(precision)*(precision_l*mean_l + precision_r*mean_r)
-
-    # Update attributes
-    edge.params["precision"] = precision
-    edge.params["mean"] = mean
+    edge.precision = new_precision
+    edge.mean = edge.precision*weighted_mean
 
     return Nothing
 end
 
 function message(edge::EdgeGaussian)
     "Outgoing message"
-    return Normal(edge.params["mean"], edge.params["precision"])
+    return Normal(edge.mean, edge.precision)
 end
 
 function entropy(edge::EdgeGaussian)
     "Compute entropy of Gaussian distribution"
-    return log(2*π * ℯ / edge.params["precision"])/2
+    return log(2*π * ℯ / edge.precision)/2
 end
 
-function free_energy(edge::EdgeGaussian)
+function free_energy(edge::EdgeGaussian, graph::MetaGraph)
     "Compute free energy of edge and connecting nodes"
+
+    # Extract connecting nodes
+    N = neighbors(graph, graph[edge.id, :id])
 
     # Query nodes for energy
     U = 0
-    for key in keys(edge.nodes)
-        U += energy(eval(edge.nodes[key]))
+    for n in N
+        U += energy(get_prop!(graph, :id, graph[n, :id], :object))
+        #TODO: check
     end
 
     # Compute own entropy
@@ -106,67 +92,34 @@ function free_energy(edge::EdgeGaussian)
     return U - H
 end
 
-function act(edge::EdgeGaussian, out_message, delta_free_energy::Float64)
-    "Outgoing message is updated variational parameters"
+function act(edge::EdgeGaussian,
+             variational_distribution::Normal,
+             delta_free_energy::Float64,
+             graph::MetaGraph)
+    "Pass variational distribution to connected nodes."
 
-        # State type determines which nodes are connected
-        if edge.state_type == "previous"
+    # Extract connecting nodes
+    N = neighbors(graph, graph[edge.id, :id])
 
-            # Tuple of message, change in free energy of message and edge id
-            T = (out_message, delta_free_energy, "mean")
+    # Update marginal at connected nodes
+    for neighbor in N
+        node = get_prop!(G[neigbor, :id], :object)
+        node.messages[edge.id] = variational_distribution
+    end
 
-            # Put message in queue of connecting nodes
-            enqueue!(eval(edge.nodes["right"]).incoming_messages, T)
-            # TODO: avoid hard-coding node key
+    # Tuple of message, change in free energy of message and edge id
+    T = (marginal, delta_free_energy)
 
-        elseif edge.state_type == "current"
 
-            # Tuples of message, change in free energy of message and edge id
-            T_left = (out_message, delta_free_energy, "data")
-            T_bottom = (out_message, delta_free_energy, "mean")
-            # TODO: edge and node id's are confusing
 
-            # Put message in queue of connecting nodes
-            enqueue!(eval(edge.nodes["left"]).incoming_messages, T_left)
-            enqueue!(eval(edge.nodes["bottom"]).incoming_messages, T_bottom)
-            # TODO: avoid hard-coding node key
-
-        else
-            throw("Exception: state_type unknown.")
-        end
     return Nothing
 end
 
-function react(edge::EdgeGaussian)
+function react(edge::EdgeGaussian, G::MetaGraph)
     "React to incoming messages"
 
-    # Check lengths of queues
-    l1 = length(edge.incoming_messages["left"])
-    l2 = length(edge.incoming_messages["bottom"])
-
-    # Iterate through the longer queue until both queues are equally long
-    for i = 1:abs(l1 - l2)
-
-        if l1 > l2
-            edge.messages["left"] = dequeue!(edge.incoming_messages["left"])
-        else
-            edge.messages["bottom"] = dequeue!(edge.incoming_messages["bottom"])
-        end
-
-        # Update variational distribution
-        update(edge, edge.messages["left"], edge.messages["bottom"])
-    end
-
-    # Iterate through remaining messages
-    for i = 1:min(l1, l2)
-
-        # Pop incoming messages
-        edge.messages["left"] = dequeue!(edge.incoming_messages["left"])
-        edge.messages["bottom"] = dequeue!(edge.incoming_messages["bottom"])
-
-        # Update variational distribution
-        update(edge, edge.messages["left"], edge.messages["bottom"])
-    end
+    # Update variational distribution
+    update(edge, edge.messages["left"], edge.messages["right"])
 
     # Compute delta free energy
     delta_free_energy = free_energy(edge) - edge.free_energy
@@ -175,7 +128,7 @@ function react(edge::EdgeGaussian)
     edge.free_energy = free_energy(edge)
 
     # Message from edge to nodes
-    act(edge, message(edge), delta_free_energy)
+    act(G, edge, message(edge), delta_free_energy)
 
     return Nothing
 end

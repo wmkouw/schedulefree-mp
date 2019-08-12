@@ -5,44 +5,43 @@ using DataStructures: Queue, enqueue!, dequeue!
 
 mutable struct NodeGaussian
 
-    # Factor graph properties
-    id::String
-    edges::Dict{String, Symbol}
-
-    # Message bookkeeping
-    messages::Dict{String, Normal}
-    incoming_messages::Queue{Tuple{Normal{Float64},Float64,String}}
-
     # Node properties
     transition::Float64
+    control::Float64
     precision::Float64
     threshold::Float64
+
+    # Bookkeeping of recognition distributions
+    beliefs::Dict{String, Normal}
+
+    # Identifiers of edges/nodes in factor graph
+    id::String
+    id_mean::String
+    id_data::String
+
+    # Additional properties
     verbose::Bool
 
-    function NodeGaussian(data_edge_id::Symbol,
-                          mean_edge_id::Symbol,
-                          transition::Float64,
-                          precision::Float64,
-                          id::String;
+    function NodeGaussian(id,
+                          id_mean,
+                          id_data;
+                          transition=1.0,
+                          control=0.0,
+                          precision=1.0,
                           threshold=0.0001,
                           verbose=false)
 
-        # Edge id's
-        edges = Dict{String, Symbol}("data" => data_edge_id,
-                                     "mean" => mean_edge_id)
-
-        # Keep track of incoming messages
-        messages = Dict{String, Normal}("data" => Normal(),
-                                        "mean" => Normal())
-
-        # Incoming messages consist of distributions, delta Free Energy, and edge id's
-        incoming_messages = Queue{Tuple{Normal{Float64},Float64,String}}()
+        # Keep track of recognition distributions
+        beliefs = Dict{String, Normal}(id_mean => Normal(),
+                                       id_data => Normal())
 
         # Create instance
-        self = new(id, edges,
-                   messages,
-                   incoming_messages,
+        self = new(id,
+                   id_mean,
+                   id_data,
+                   beliefs,
                    transition,
+                   control,
                    precision,
                    threshold,
                    verbose)
@@ -54,17 +53,17 @@ function energy(node::NodeGaussian)
     "Compute internal energy of node"
 
     # Expected mean
-    Em = node.transition * mean(node.messages["mean"])
+    Em = node.transition * mean(node.beliefs[id_mean]) + node.control
 
     # Expected data
-    Ex = mean(node.messages["data"])
+    Ex = mean(node.beliefs[id_data])
 
     # -log-likelihood of Gaussian with expected parameters
     return 1/2 *log(2*pi) - log(node.precision) + 1/2 *(Ex - Em)'*node.precision*(Ex - Em)
 end
 
-function message(node::NodeGaussian, edge_id::String)
-    "Compute outgoing message"
+function forward_message(node::NodeGaussian, edge_id::String)
+    "Compute message forward to x"
 
     if edge_id == "data"
 
