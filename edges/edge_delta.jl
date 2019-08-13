@@ -1,107 +1,97 @@
 export EdgeDelta
 
-using Distributions: Normal, logpdf
+using Distributions: Normal, Uniform, logpdf
 
 mutable struct EdgeDelta
-    "
+    """
     Edge for an observation
-    "
+    """
     # Distribution parameters
-    params::Dict{String, Float64}
-    prediction_error::Float64
+    observation::Float64
+    free_energy::Float64
 
     # Message bookkeeping
     messages::Dict{String, Normal}
-    incoming_messages::Dict{String, Queue{Normal}}
 
     # Factor graph properties
-    nodes::Dict{String, Symbol}
     id::String
 
-    function EdgeDelta(data::Float64, nodes::Dict{String, Symbol}, id::String)
-        "Outgoing message is updated variational parameters"
-
-        # Location of spike is mean parameter
-        params = Dict{String, Float64}("data" => data)
-
-        # Initialize prediction error
-        prediction_error = 1e12
+    function EdgeDelta(id; observation=Uniform(-Inf,Inf))
 
         # Initialize messages
-        messages = Dict{String, Normal}("top" => Normal())
+        messages = Dict{String, Any}()
 
-        # Initialize new message queue
-        incoming_messages = Dict{String, Queue{Normal}}("top" => Queue{Normal}())
+        # Initialize free energy
+        free_energy = Inf
 
-        self = new(params, prediction_error, messages, incoming_messages, nodes, id)
+        self = new(id, observation, free_energy, messages)
         return self
     end
 end
 
 function entropy(edge::EdgeDelta)
-    "Entropy of Normal(⋅, 0.0) evaluates to negative infinity"
-    return -Inf
+    "An observed variable has no entropy"
+    return 0.0
 end
 
-function free_energy(edge::EdgeGaussian)
-    "Compute free energy of edge and connecting nodes"
+function free_energy(edge::EdgeGaussian, graph::MetaGraph)
+    """
+    Free energy at observation node is node energy evaluated at observation,
+    in other words, the precision-weighted prediction error.
+    """
 
-    # Query nodes for energy
-    U = 0
-    for key in keys(edge.nodes)
-        U += energy(eval(edge.nodes[key]))
-    end
+    # Extract id of likelihood node
+    N = neighbors(graph, graph[edge.id, :id])
+    node_id = [graph[n, :id] for n in N]
 
-    # Entropy is -Inf, but is disregarded for observed nodes
+    # Collect node variable via graph
+    node = get_prop!(graph, graph[node_id, :id], :object)
 
-    # Return FE
-    return U
+    # Add to total energy
+    return energy(node) - entropy(edge)
+
 end
 
 function prediction_error(edge::EdgeDelta, message)
     "Compute precision-weighted prediction error"
-    return -logpdf(message, edge.params["data"])
+    return -logpdf(message, edge.observation)
 end
 
-function message(edge::EdgeDelta)
+function belief(edge::EdgeDelta)
     "Edge is distribution"
-    # TODO: create a delta distribution
-    return Normal(edge.params["data"], 0.0)
+    return edge.observation
 end
 
-function act(edge::EdgeDelta, message, pred_error)
-    "Outgoing message is the delta spike itself"
+function act(edge::EdgeDelta, message, old_free_energy, graph::MetaGraph)
+    "Pass observation to likelihood node."
 
-    # Outgoing signal consists of the message, its error and the edge id
-    outgoing_message = (message, pred_error, "data")
+    # Get edge name from edge id
+    edge_name = key_from_value(edge.id)
 
-    # Put message in queue of connecting nodes
-    enqueue!(eval(edge.nodes["top"]).incoming_messages, outgoing_message)
-    # TODO: avoid hard-coding node key
+    # Extract likelihood node id
+    n = neighbors(graph, graph[edge.id, :id])
+    node = get_prop!(graph, graph[graph[n, :id], :id], :object)
+
+    # Update belief at node
+    node.beliefs[edge_name] = belief
+
+    # Compute change in free energy due to passing message
+    delta_free_energy = free_energy(edge) - free_energy
+
+    # Tell node that it has received a new message
+    enqueue!(node.incoming, (edge.id, delta_free_energy))
 
     return Nothing
 end
 
-function react(edge::EdgeDelta)
+function react(edge::EdgeDelta, graph::MetaGraph)
     "React to incoming messages"
 
-    # Iterate through remaining messages
-    pred_error = 0
-    for i = 1:length(edge.incoming_messages["top"])
-
-        # Pop incoming messages
-        edge.messages["top"] = dequeue!(edge.incoming_messages["top"])
-
-        # Update variational distribution
-        pred_error += prediction_error(edge, edge.messages["top"])
-
-    end
-
-    # Keep track of prediction error
-    edge.prediction_error = pred_error
+    # Estimate free energy
+    old_free_energy = free_energy(edge)
 
     # Message from edge to nodes
-    act(edge, message(edge), pred_error)
+    act(edge, message(edge), old_free_energy, graph)
 
     return Nothing
 end

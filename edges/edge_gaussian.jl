@@ -143,8 +143,15 @@ function react(edge::EdgeGaussian, graph::MetaGraph)
     # Compute free energy after update
     new_free_energy = free_energy(edge)
 
-    # Message from edge to nodes
-    act(edge, message(edge), new_free_energy - edge.free_energy, graph)
+    # Compute change in free energy after update
+    delta_free_energy = new_free_energy - edge.free_energy
+
+    # Do not react if the change in free energy is not large enough
+    if delta_free_energy > edge.threshold
+
+        # Message from edge to nodes
+        act(edge, belief(edge), delta_free_energy, graph)
+    end
 
     # Store new free energy
     edge.free_energy = new_free_energy
