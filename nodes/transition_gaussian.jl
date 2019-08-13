@@ -10,13 +10,11 @@ mutable struct TransitionGaussian
 
     Contains a multiplication node with transition coefficients,
     an addition node with control coefficients, and
-    a process noise term, set to Gaussian by default.
-
-    Assumes the graph has directed edges.
+    a Gaussian process noise term.
     """
 
     # Reaction parameters
-    incoming::Queue
+    incoming::Queue{Tuple}
     threshold::Float64
 
     # Identifiers of edges/nodes in factor graph

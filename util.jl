@@ -1,8 +1,9 @@
-export Util
-
-using LinearAlgebra
+"""
+Set of utility functions.
+"""
 
 function mean(m::Float64)
+    """Mean of a scalar is the scalar"""
     return m
 end
 

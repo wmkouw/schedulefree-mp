@@ -58,30 +58,30 @@ In other words, Markov chains of time-slices of a state-space models.
 """
 
 # Start graph
-G = MetaGraph(PathDiGraph(5))
+graph = MetaGraph(PathDiGraph(5))
 
-# Edge object for x_t-1
+# Previous state
 global x_tmin = EdgeGaussian("x_tmin")
-set_props!(G, 1, Dict{Symbol,Any}(:object => :x_tmin, :type => "edge", :id => "x_tmin"))
+set_props!(graph, 1, Dict{Symbol,Any}(:object => :x_tmin, :type => "edge", :id => "x_tmin"))
 
 # State transition node
-global g_t = NodeGaussian("g_t", edge_mean=:x_tmin, edge_data=:x_t, edge_precision=process_noise)
-set_props!(G, 2, Dict{Symbol,Any}(:object => :g_t, :type => "node", :id => "g_t")
+global g_t = TransitionGaussian("g_t", edge_mean=:x_tmin, edge_data=:x_t, edge_precision=process_noise)
+set_props!(graph, 2, Dict{Symbol,Any}(:object => :g_t, :type => "node", :id => "g_t")
 
-# New state edge
+# Current state
 global x_t = EdgeGaussian("x_t")
-set_props!(G, 3, Dict{Symbol,Any}(:object => :x_t, :type => "edge", :id => "x_t")
+set_props!(graph, 3, Dict{Symbol,Any}(:object => :x_t, :type => "edge", :id => "x_t")
 
-# Observation node
-global f_t = NodeGaussian("f_t", edge_mean=:x_t, edge_data=:y_t, edge_precision=measurement_noise)
-set_props!(G, 4, Dict{Symbol,Any}(:object => :f_t, :type => "node", :id => "f_t")
+# Observation likelihood node
+global f_t = LikelihoodGaussian("f_t", edge_mean=:x_t, edge_data=:y_t, edge_precision=measurement_noise)
+set_props!(graph, 4, Dict{Symbol,Any}(:object => :f_t, :type => "node", :id => "f_t")
 
-# Observation edge
+# Observation
 global y_t = EdgeDelta("y_t")
-set_props!(G, 5, Dict{Symbol,Any}(:object => :y_t, :type => "edge", :id => "y_t")
+set_props!(graph, 5, Dict{Symbol,Any}(:object => :y_t, :type => "edge", :id => "y_t")
 
-# Make sure graph nodes
-set_indexing_prop!(G, :id)
+# Ensure vertices can be recalled from given id
+set_indexing_prop!(graph, :id)
 
 """
 Run inference procedure
@@ -94,39 +94,34 @@ estimated_states = zeros(T,2)
 global x_t = EdgeGaussian("x_0"; mean=m0, precision=W0)
 
 for t = 1:T
-# t=1
+
+    # Report progress
     println("At iteration "*string(t)*"/"*string(T))
 
-    # Edge object for x_t-1
-    x_tmin = EdgeGaussian(x_t.params["mean"],
-                          x_t.params["precision"],
-                          free_energy=x_t.free_energy)
+    # Previous state
+    global x_tmin = EdgeGaussian("x_tmin", mean=x_t.params["mean"], x_t.params["precision"])
 
     # State transition node
-    g_t = NodeGaussian(transition=transition_matrix,
-                       precision=process_noise)
+    global g_t = TransitionGaussian("g_t", edge_mean=:x_tmin, edge_data=:x_t, edge_precision=process_noise)
 
-    # New state edge
-    x_t = EdgeGaussian(z_t.params["mean"],
-                       z_t.params["precision"])
+    # Current state
+    global x_t = EdgeGaussian("x_t", mean=x_tmin.params["mean"], x_tmin.params["precision"])
 
-    # Observation node
-    f_t = NodeGaussian(emission_matrix,
-                       measurement_noise)
+    # Observation likelihood node
+    global f_t = LikelihoodGaussian("f_t", edge_mean=:x_t, edge_data=:y_t, edge_precision=measurement_noise)
 
     # Observation edge
-    y_t = EdgeDelta(observed[t])
+    global y_t = EdgeDelta("y_t", observation=observed[t])
 
     # Start message routine
-    act(x_tmin, message(z_t), 1e12, G)
+    act(x_tmin, message(z_t), 1e12, graph)
 
     # Start clock
     for tt = 1:TT
-
-        react(f_t, G)
-        react(x_t, G)
-        react(g_t, G)
-        react(y_t, G)
+        react(f_t, graph)
+        react(x_t, graph)
+        react(g_t, graph)
+        react(y_t, graph)
     end
 
     # Write out estimated state parameters
@@ -148,5 +143,5 @@ if viz
           fillalpha = 0.2,
           fillcolor = "blue", label="")
     scatter!(observed, color="black", label="observations")
-    savefig(pwd()*"/experiment-KalmanF/viz/state_estimates.png")
+    savefig(pwd()*"/experiment-schedulefree/viz/state_estimates.png")
 end

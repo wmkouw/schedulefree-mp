@@ -1,10 +1,10 @@
-export NodeGaussian
+export LikelihoodGaussian
 
 using Distributions: Normal, Gamma, params, mean
 using DataStructures: Queue, enqueue!, dequeue!
 include("../util.jl")
 
-mutable struct NodeGaussian
+mutable struct LikelihoodGaussian
     """
     Composite node for observation likelihoods.
 
@@ -24,12 +24,13 @@ mutable struct NodeGaussian
     # Additional properties
     verbose::Bool
 
-    function NodeGaussian(id;
-                          edge_mean=0.0,
-                          edge_data=0.0,
-                          edge_precision=1.0,
-                          threshold=0.0,
-                          verbose=false)
+    function LikelihoodGaussian(id;
+                                edge_mean=0.0,
+                                edge_data=0.0,
+                                edge_precision=1.0,
+                                edge_emission=1.0,
+                                threshold=0.0,
+                                verbose=false)
 
         # Keep track of recognition distributions
         beliefs = Dict{String, Any}()
@@ -58,6 +59,14 @@ mutable struct NodeGaussian
             beliefs["precision"] = Gamma()
         end
 
+        # Check for emission and controls
+        if isa(edge_emission, Float64)
+            beliefs["emission"] = edge_emission
+        else
+            connected_edgess["emission"] = edge_emission
+            beliefs["emission"] = Normal()
+        end
+
         # Initialize queue for incoming messages
         incoming = Queue{Tuple}()
 
@@ -67,8 +76,11 @@ mutable struct NodeGaussian
     end
 end
 
-function energy(node::NodeGaussian)
+function energy(node::LikelihoodGaussian)
     "Compute internal energy of node"
+
+    # Expected emission coefficients
+    EB = mean(node.beliefs["emission"])
 
     # Expected mean
     Em = mean(node.beliefs["mean"])
@@ -80,14 +92,17 @@ function energy(node::NodeGaussian)
     Et = mean(node.beliefs["precision"])
 
     # -log-likelihood of Gaussian with expected parameters
-    return 1/2 *log(2*pi) - log(Et) + 1/2 *(Ex - Ex)'*Et*(Ex - Ex)
+    return 1/2 *log(2*pi) - log(Et) + 1/2 *(Ex - EB*Ex)'*Et*(Ex - EB*Ex)
 end
 
-function message(node::NodeGaussian, edge_id::String)
+function message(node::LikelihoodGaussian, edge_id::String)
     "Compute message forward to x"
 
     # Get edge name from edge id
-    edge_name = key_from_value(node.connected_edges, edge_id)
+    edge_name = key_from_value(node.edge_ids, edge_id)
+
+    # Expected emission coefficients
+    EB = mean(node.beliefs["emission"])
 
     # Expected mean
     Em = mean(node.beliefs["mean"])
@@ -113,6 +128,10 @@ function message(node::NodeGaussian, edge_id::String)
         # Supply sufficient statistics
         error("Exception: not implemented yet.")
 
+    elseif edge_name == "emission"
+
+        error("Exception: not implemented yet.")
+
     else
         throw("Exception: edge id unknown.")
     end
@@ -120,7 +139,7 @@ function message(node::NodeGaussian, edge_id::String)
     return message
 end
 
-function act(node::NodeGaussian, edge_id::String, graph::MetaGraph)
+function act(node::LikelihoodGaussian, edge_id::String, graph::MetaGraph)
     "Send out message for one of the connecting edges"
 
     # Compute message for a particular edge
@@ -132,7 +151,7 @@ function act(node::NodeGaussian, edge_id::String, graph::MetaGraph)
     return Nothing
 end
 
-function react(node::NodeGaussian, graph::MetaGraph)
+function react(node::LikelihoodGaussian, graph::MetaGraph)
     "React to incoming messages from edges"
 
     # Find edges attached to node
