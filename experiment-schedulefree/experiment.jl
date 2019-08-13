@@ -54,18 +54,18 @@ Model/graph specification
 This assumes the following type of models
 p(y_{1:T}, x_{0:T} | u_{1:T}) = p(x_0) Π_t p(y_t, x_t | x_{t-1}, u_t)
 
-In other words, Markov chains of time-step subgraphs.
+In other words, Markov chains of time-slices of a state-space models.
 """
 
 # Start graph
-G = MetaGraph(PathGraph(5))
+G = MetaGraph(PathDiGraph(5))
 
 # Edge object for x_t-1
 global x_tmin = EdgeGaussian("x_tmin")
 set_props!(G, 1, Dict{Symbol,Any}(:object => :x_tmin, :type => "edge", :id => "x_tmin"))
 
 # State transition node
-global g_t = NodeGaussian("g_t", "x_tmin", "x_t")
+global g_t = NodeGaussian("g_t", edge_mean=:x_tmin, edge_data=:x_t, edge_precision=process_noise)
 set_props!(G, 2, Dict{Symbol,Any}(:object => :g_t, :type => "node", :id => "g_t")
 
 # New state edge
@@ -73,11 +73,11 @@ global x_t = EdgeGaussian("x_t")
 set_props!(G, 3, Dict{Symbol,Any}(:object => :x_t, :type => "edge", :id => "x_t")
 
 # Observation node
-global f_t = NodeGaussian("f_t", "x_t", "y_t")
+global f_t = NodeGaussian("f_t", edge_mean=:x_t, edge_data=:y_t, edge_precision=measurement_noise)
 set_props!(G, 4, Dict{Symbol,Any}(:object => :f_t, :type => "node", :id => "f_t")
 
 # Observation edge
-global y_t = EdgeDelta(id="y_t")
+global y_t = EdgeDelta("y_t")
 set_props!(G, 5, Dict{Symbol,Any}(:object => :y_t, :type => "edge", :id => "y_t")
 
 # Make sure graph nodes

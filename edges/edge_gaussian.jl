@@ -2,6 +2,7 @@ export EdgeGaussian
 
 using Distributions: Normal, mean, std, params
 using DataStructures: Queue, enqueue!, dequeue!
+using LightGraphs, MetaGraphs
 
 mutable struct EdgeGaussian
     "
@@ -37,6 +38,11 @@ mutable struct EdgeGaussian
     end
 end
 
+function mean(edge::EdgeGaussian)
+    "Return mean of variational distribution"
+    return edge.mean
+end
+
 function update(edge::EdgeGaussian)
     "Update recognition distribution as the product of messages"
 
@@ -49,26 +55,26 @@ function update(edge::EdgeGaussian)
         mean, var = params(edge.messages[key])
 
         # Sum over precisions
-        new_precision += inv(var)
+        total_precision += inv(var)
 
         # Compute weighted means
         weighted_mean += inv(var)*mean
     end
 
     # Update variational parameters
-    edge.precision = new_precision
-    edge.mean = edge.precision*weighted_mean
+    edge.precision = total_precision
+    edge.mean = inv(total_precision)*weighted_mean
 
     return Nothing
 end
 
-function message(edge::EdgeGaussian)
-    "Outgoing message"
+function belief(edge::EdgeGaussian)
+    "Outgoing message is belief over variable (recognition distribution)"
     return Normal(edge.mean, edge.precision)
 end
 
 function entropy(edge::EdgeGaussian)
-    "Compute entropy of Gaussian distribution"
+    "Entropy of Gaussian distribution"
     return log(2*π * ℯ / edge.precision)/2
 end
 
@@ -77,58 +83,71 @@ function free_energy(edge::EdgeGaussian, graph::MetaGraph)
 
     # Extract connecting nodes
     N = neighbors(graph, graph[edge.id, :id])
+    node_ids = [graph[n, :id] for n in N]
 
-    # Query nodes for energy
+    # Initialize node energies
     U = 0
-    for n in N
-        U += energy(get_prop!(graph, :id, graph[n, :id], :object))
-        #TODO: check
+
+    # Update marginal at connected nodes
+    for node_id in node_ids
+
+        # Collect node variable via graph
+        node = get_prop!(graph, graph[node_id, :id], :object)
+
+        # Add to total energy
+        U += energy(node)
     end
 
     # Compute own entropy
     H = entropy(edge)
 
-    # Return FE
+    # Return free energy
     return U - H
 end
 
 function act(edge::EdgeGaussian,
-             variational_distribution::Normal,
+             belief::Normal,
              delta_free_energy::Float64,
              graph::MetaGraph)
-    "Pass variational distribution to connected nodes."
+    "Pass belief to connected nodes."
 
     # Extract connecting nodes
     N = neighbors(graph, graph[edge.id, :id])
+    node_ids = [graph[n, :id] for n in N]
 
     # Update marginal at connected nodes
-    for neighbor in N
-        node = get_prop!(G[neigbor, :id], :object)
-        node.messages[edge.id] = variational_distribution
+    for node_id in node_ids
+
+        # Collect node variable via graph
+        node = get_prop!(graph, graph[node_id, :id], :object)
+
+        # Get edge name from edge id
+        edge_name = key_from_value(edge.id)
+
+        # Update belief distribution
+        node.beliefs[edge_name] = belief
+
+        # Tell node that it has received a new message
+        enqueue!(node.incoming, (edge.id, delta_free_energy))
     end
-
-    # Tuple of message, change in free energy of message and edge id
-    T = (marginal, delta_free_energy)
-
-
 
     return Nothing
 end
 
-function react(edge::EdgeGaussian, G::MetaGraph)
+function react(edge::EdgeGaussian, graph::MetaGraph)
     "React to incoming messages"
 
     # Update variational distribution
-    update(edge, edge.messages["left"], edge.messages["right"])
+    update(edge)
 
-    # Compute delta free energy
-    delta_free_energy = free_energy(edge) - edge.free_energy
-
-    # Update edge's free energy
-    edge.free_energy = free_energy(edge)
+    # Compute free energy after update
+    new_free_energy = free_energy(edge)
 
     # Message from edge to nodes
-    act(G, edge, message(edge), delta_free_energy)
+    act(edge, message(edge), new_free_energy - edge.free_energy, graph)
+
+    # Store new free energy
+    edge.free_energy = new_free_energy
 
     return Nothing
 end
