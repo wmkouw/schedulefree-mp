@@ -33,21 +33,16 @@ mutable struct EdgeGaussian
         messages = Dict{String, Normal}()
 
         # Construct instance
-        self = new(mean, precision, messages, id, free_energy)
+        self = new(mean, precision, free_energy, messages, id)
         return self
     end
-end
-
-function mean(edge::EdgeGaussian)
-    "Return mean of variational distribution"
-    return edge.mean
 end
 
 function update(edge::EdgeGaussian)
     "Update recognition distribution as the product of messages"
 
     # Loop over stored messages
-    new_precision = 0
+    total_precision = 0
     weighted_mean = 0
     for key in keys(edge.messages)
 
@@ -70,7 +65,7 @@ end
 
 function belief(edge::EdgeGaussian)
     "Outgoing message is belief over variable (recognition distribution)"
-    return Normal(edge.mean, edge.precision)
+    return Normal(edge.mean, inv(edge.precision))
 end
 
 function entropy(edge::EdgeGaussian)
@@ -92,7 +87,7 @@ function free_energy(edge::EdgeGaussian, graph::MetaGraph)
     for node_id in node_ids
 
         # Collect node variable via graph
-        node = get_prop!(graph, graph[node_id, :id], :object)
+        node = eval(get_prop(graph, graph[node_id, :id], :object))
 
         # Add to total energy
         U += energy(node)
@@ -119,10 +114,10 @@ function act(edge::EdgeGaussian,
     for node_id in node_ids
 
         # Collect node variable via graph
-        node = get_prop!(graph, graph[node_id, :id], :object)
+        node = eval(get_prop(graph, graph[node_id, :id], :object))
 
         # Get edge name from edge id
-        edge_name = key_from_value(edge.id)
+        edge_name = key_from_value(node.connected_edges, edge.id)
 
         # Update belief distribution
         node.beliefs[edge_name] = belief
@@ -141,17 +136,13 @@ function react(edge::EdgeGaussian, graph::MetaGraph)
     update(edge)
 
     # Compute free energy after update
-    new_free_energy = free_energy(edge)
+    new_free_energy = free_energy(edge, graph)
 
     # Compute change in free energy after update
     delta_free_energy = new_free_energy - edge.free_energy
 
-    # Do not react if the change in free energy is not large enough
-    if delta_free_energy > edge.threshold
-
-        # Message from edge to nodes
-        act(edge, belief(edge), delta_free_energy, graph)
-    end
+    # Message from edge to nodes
+    act(edge, belief(edge), delta_free_energy, graph)
 
     # Store new free energy
     edge.free_energy = new_free_energy

@@ -26,12 +26,12 @@ function gen_data_randomwalk(transition_precision,
     return y, x
 end
 
-function gen_data_kalmanf(transition_matrix,
-                          emission_matrix,
-                          transition_precision,
-                          emission_precision,
-                          m0, W0;
-                          time_horizon=100)
+function gen_data_LGDS(transition_matrix,
+                       emission_matrix,
+                       transition_precision,
+                       emission_precision,
+                       m0, W0;
+                       time_horizon=100)
     "Draw a time-series according to a generative model"
 
     # Dimensionality

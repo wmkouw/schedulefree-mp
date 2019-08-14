@@ -1,6 +1,6 @@
 export TransitionGaussian
 
-using Distributions: Normal, Gamma, params, mean
+using Distributions: Normal, Gamma, mean
 using DataStructures: Queue, enqueue!, dequeue!
 include("../util.jl")
 
@@ -13,14 +13,14 @@ mutable struct TransitionGaussian
     a Gaussian process noise term.
     """
 
+    # Identifiers of edges/nodes in factor graph
+    id::String
+    beliefs::Dict{String, Any}
+    connected_edges::Dict{String, String}
+
     # Reaction parameters
     incoming::Queue{Tuple}
     threshold::Float64
-
-    # Identifiers of edges/nodes in factor graph
-    id::String
-    beliefs::Dict{String, Normal}
-    connected_edges::Dict{String, String}
 
     # Additional properties
     verbose::Bool
@@ -36,6 +36,7 @@ mutable struct TransitionGaussian
 
         # Keep track of recognition distributions
         beliefs = Dict{String, Any}()
+        connected_edges = Dict{String, String}()
 
         # Check for set parameters vs recognition distributions
         if isa(edge_data, Float64)
@@ -47,17 +48,17 @@ mutable struct TransitionGaussian
         if isa(edge_mean, Float64)
             belief["mean"] = edge_mean
         else
-            connected_edgess["mean"] = edge_mean
+            connected_edges["mean"] = edge_mean
             beliefs["mean"] = Normal()
         end
         if isa(edge_precision, Float64)
-            if edge.precision > 0.0
+            if edge_precision > 0.0
                 beliefs["precision"] = edge_precision
             else
                 error("Exception: precision should be positive.")
             end
         else
-            connected_edgess["precision"] = edge_precision
+            connected_edges["precision"] = edge_precision
             beliefs["precision"] = Gamma()
         end
 
@@ -65,13 +66,13 @@ mutable struct TransitionGaussian
         if isa(edge_transition, Float64)
             beliefs["transition"] = edge_transition
         else
-            connected_edgess["transition"] = edge_transition
+            connected_edges["transition"] = edge_transition
             beliefs["transition"] = Normal()
         end
         if isa(edge_control, Float64)
             beliefs["control"] = edge_control
         else
-            connected_edgess["control"] = edge_control
+            connected_edges["control"] = edge_control
             beliefs["control"] = Normal()
         end
 
@@ -79,7 +80,7 @@ mutable struct TransitionGaussian
         incoming = Queue{Tuple}()
 
         # Create instance
-        self = new(id, connected_edges, beliefs, incoming, threshold, verbose)
+        self = new(id, beliefs, connected_edges, incoming, threshold, verbose)
         return self
     end
 end
@@ -103,14 +104,14 @@ function energy(node::TransitionGaussian)
     Et = mean(node.beliefs["precision"])
 
     # -log-likelihood of Gaussian with expected parameters
-    return 1/2 *log(2*pi) - log(Et) + 1/2 *(Ex - (EA*Ex+EU))'*Et*(Ex - (EA*Ex+EU))
+    return 1/2 *log(2*pi) - log(Et) + 1/2 *(Ex - (EA*Em+EU))'*Et*(Ex - (EA*Em+EU))
 end
 
 function message(node::TransitionGaussian, edge_id::String)
     "Compute message forward to x"
 
     # Get edge name from edge id
-    edge_name = key_from_value(edge_id)
+    edge_name = key_from_value(node.connected_edges, edge_id)
 
     # Expected transition coefficients
     EA = mean(node.beliefs["transition"])
@@ -130,12 +131,12 @@ function message(node::TransitionGaussian, edge_id::String)
     if edge_name == "data"
 
         # Supply sufficient statistics
-        message = Normal(EA*Ex + EU, Et)
+        message = Normal(EA*Em + EU, inv(Et))
 
     elseif edge_name == "mean"
 
         # Supply sufficient statistics
-        message = Normal(Ex, Et)
+        message = Normal(Ex, inv(Et))
 
     elseif edge_name == "precision"
 
@@ -164,7 +165,7 @@ function act(node::TransitionGaussian, edge_id::String, graph::MetaGraph)
     outgoing_message = message(node, edge_id)
 
     # Pass message to edge
-    graph[edge_id, :object].messages = outgoing_message
+    eval(graph[graph[edge_id, :id], :object]).messages[node.id] = outgoing_message
 
     return Nothing
 end

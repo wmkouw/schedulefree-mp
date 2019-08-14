@@ -6,17 +6,18 @@ mutable struct EdgeDelta
     """
     Edge for an observation
     """
+
+    # Factor graph properties
+    id::String
+
     # Distribution parameters
     observation::Float64
     free_energy::Float64
 
     # Message bookkeeping
-    messages::Dict{String, Normal}
+    messages::Dict{String, Any}
 
-    # Factor graph properties
-    id::String
-
-    function EdgeDelta(id; observation=Uniform(-Inf,Inf))
+    function EdgeDelta(id; observation=NaN)
 
         # Initialize messages
         messages = Dict{String, Any}()
@@ -34,18 +35,17 @@ function entropy(edge::EdgeDelta)
     return 0.0
 end
 
-function free_energy(edge::EdgeGaussian, graph::MetaGraph)
+function free_energy(edge::EdgeDelta, graph::MetaGraph)
     """
     Free energy at observation node is node energy evaluated at observation,
     in other words, the precision-weighted prediction error.
     """
 
     # Extract id of likelihood node
-    N = neighbors(graph, graph[edge.id, :id])
-    node_id = [graph[n, :id] for n in N]
+    node_id = neighbors(graph, graph[edge.id, :id])[1]
 
     # Collect node variable via graph
-    node = get_prop!(graph, graph[node_id, :id], :object)
+    node = eval(get_prop(graph, node_id, :object))
 
     # Add to total energy
     return energy(node) - entropy(edge)
@@ -62,21 +62,23 @@ function belief(edge::EdgeDelta)
     return edge.observation
 end
 
-function act(edge::EdgeDelta, message, old_free_energy, graph::MetaGraph)
+function act(edge::EdgeDelta, belief, old_free_energy, graph::MetaGraph)
     "Pass observation to likelihood node."
 
-    # Get edge name from edge id
-    edge_name = key_from_value(edge.id)
+    # Extract connecting node
+    node_id = neighbors(graph, graph[edge.id, :id])[1]
 
-    # Extract likelihood node id
-    n = neighbors(graph, graph[edge.id, :id])
-    node = get_prop!(graph, graph[graph[n, :id], :id], :object)
+    # Call node from id
+    node = eval(get_prop(graph, graph[graph[node_id, :id], :id], :object))
+
+    # Get edge name from edge id
+    edge_name = key_from_value(node.connected_edges, edge.id)
 
     # Update belief at node
     node.beliefs[edge_name] = belief
 
     # Compute change in free energy due to passing message
-    delta_free_energy = free_energy(edge) - free_energy
+    delta_free_energy = free_energy(edge, graph) - old_free_energy
 
     # Tell node that it has received a new message
     enqueue!(node.incoming, (edge.id, delta_free_energy))
@@ -88,10 +90,10 @@ function react(edge::EdgeDelta, graph::MetaGraph)
     "React to incoming messages"
 
     # Estimate free energy
-    old_free_energy = free_energy(edge)
+    old_free_energy = free_energy(edge, graph)
 
     # Message from edge to nodes
-    act(edge, message(edge), old_free_energy, graph)
+    act(edge, belief(edge), old_free_energy, graph)
 
     return Nothing
 end
