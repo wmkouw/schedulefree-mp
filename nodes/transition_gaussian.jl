@@ -26,8 +26,8 @@ mutable struct TransitionGaussian
     verbose::Bool
 
     function TransitionGaussian(id;
-                                edge_mean=0.0,
                                 edge_data=0.0,
+                                edge_mean=0.0,
                                 edge_precision=1.0,
                                 edge_transition=1.0,
                                 edge_control=0.0,
@@ -46,7 +46,7 @@ mutable struct TransitionGaussian
             beliefs["data"] = Normal()
         end
         if isa(edge_mean, Float64)
-            belief["mean"] = edge_mean
+            beliefs["mean"] = edge_mean
         else
             connected_edges["mean"] = edge_mean
             beliefs["mean"] = Normal()
@@ -88,19 +88,11 @@ end
 function energy(node::TransitionGaussian)
     "Compute internal energy of node"
 
-    # Expected transition coefficients
+    # Expectations over beliefs
     EA = mean(node.beliefs["transition"])
-
-    # Expected control coefficients
     EU = mean(node.beliefs["control"])
-
-    # Expected mean
     Em = mean(node.beliefs["mean"])
-
-    # Expected data
     Ex = mean(node.beliefs["data"])
-
-    # Expected precision
     Et = mean(node.beliefs["precision"])
 
     # -log-likelihood of Gaussian with expected parameters
@@ -113,19 +105,11 @@ function message(node::TransitionGaussian, edge_id::String)
     # Get edge name from edge id
     edge_name = key_from_value(node.connected_edges, edge_id)
 
-    # Expected transition coefficients
+    # Expectations over beliefs
     EA = mean(node.beliefs["transition"])
-
-    # Expected control coefficients
     EU = mean(node.beliefs["control"])
-
-    # Expected mean
     Em = mean(node.beliefs["mean"])
-
-    # Expected data
     Ex = mean(node.beliefs["data"])
-
-    # Expected precision
     Et = mean(node.beliefs["precision"])
 
     if edge_name == "data"
@@ -140,8 +124,13 @@ function message(node::TransitionGaussian, edge_id::String)
 
     elseif edge_name == "precision"
 
+        # Extract precisions from beliefs
+        Sx = var(node.beliefs["data"])
+        Sm = var(node.beliefs["mean"])
+
         # Supply sufficient statistics
-        error("Exception: not implemented yet.")
+        println((Sx + Sm + (Ex - Em)^2)/2)
+        message = Gamma(3/2, (Sx + Sm + (Ex - Em)^2)/2)
 
     elseif edge_name == "transition"
 

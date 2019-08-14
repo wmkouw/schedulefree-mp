@@ -5,9 +5,8 @@ using DataStructures: Queue, enqueue!, dequeue!
 using LightGraphs, MetaGraphs
 
 mutable struct EdgeGaussian
-    "
-    Edge with a Gaussian recognition distribution
-    "
+    """Edge with a Gaussian recognition distribution"""
+
     # Recognition distribution parameters
     mean::Float64
     precision::Float64
@@ -19,10 +18,7 @@ mutable struct EdgeGaussian
     # Edge id in factor graph
     id::String
 
-    function EdgeGaussian(id;
-                          mean=0.0,
-                          precision=1.0,
-                          free_energy=1e12)
+    function EdgeGaussian(id; mean=0.0, precision=1.0, free_energy=1e12)
 
         # Check valid precision
         if precision <= 0

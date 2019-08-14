@@ -44,7 +44,7 @@ mutable struct LikelihoodGaussian
             beliefs["data"] = Normal()
         end
         if isa(edge_mean, Float64)
-            belief["mean"] = edge_mean
+            beliefs["mean"] = edge_mean
         else
             connected_edges["mean"] = edge_mean
             beliefs["mean"] = Normal()
@@ -126,8 +126,12 @@ function message(node::LikelihoodGaussian, edge_id::String)
 
     elseif edge_name == "precision"
 
+        # Extract precisions from beliefs
+        Px = 1/var(node.beliefs["data"])
+        Pm = 1/var(node.beliefs["mean"])
+
         # Supply sufficient statistics
-        error("Exception: not implemented yet.")
+        message = Gamma(3/2, (Px + Pm + (Ex - Em)^2)/2)
 
     elseif edge_name == "emission"
 

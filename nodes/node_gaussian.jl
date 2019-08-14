@@ -5,34 +5,30 @@ using DataStructures: Queue, enqueue!, dequeue!
 include("../util.jl")
 
 mutable struct NodeGaussian
-    """
-    Composite node for observation likelihoods.
+    """Gaussian distribution node"""
 
-    Contains a multiplication node with emission coefficients,
-    and a Gaussian measurement noise term.
-    """
+    # Identifiers of edges/nodes in factor graph
+    id::String
+    beliefs::Dict{String, Any}
+    connected_edges::Dict{String, String}
 
     # Reaction parameters
     incoming::Queue{Tuple}
     threshold::Float64
 
-    # Identifiers of edges/nodes in factor graph
-    id::String
-    beliefs::Dict{String, Normal}
-    connected_edges::Dict{String, String}
-
     # Additional properties
     verbose::Bool
 
     function NodeGaussian(id;
-                          edge_mean=0.0,
                           edge_data=0.0,
+                          edge_mean=0.0,
                           edge_precision=1.0,
                           threshold=0.0,
                           verbose=false)
 
         # Keep track of recognition distributions
         beliefs = Dict{String, Any}()
+        connected_edges = Dict{String, String}()
 
         # Check for set parameters vs recognition distributions
         if isa(edge_data, Float64)
@@ -44,17 +40,17 @@ mutable struct NodeGaussian
         if isa(edge_mean, Float64)
             belief["mean"] = edge_mean
         else
-            connected_edgess["mean"] = edge_mean
+            connected_edges["mean"] = edge_mean
             beliefs["mean"] = Normal()
         end
         if isa(edge_precision, Float64)
-            if edge.precision > 0.0
+            if edge_precision > 0.0
                 beliefs["precision"] = edge_precision
             else
                 error("Exception: precision should be positive.")
             end
         else
-            connected_edgess["precision"] = edge_precision
+            connected_edges["precision"] = edge_precision
             beliefs["precision"] = Gamma()
         end
 
@@ -62,7 +58,7 @@ mutable struct NodeGaussian
         incoming = Queue{Tuple}()
 
         # Create instance
-        self = new(id, connected_edges, beliefs, incoming, threshold, verbose)
+        self = new(id, beliefs, connected_edges, incoming, threshold, verbose)
         return self
     end
 end
@@ -84,24 +80,20 @@ function energy(node::NodeGaussian)
 end
 
 function message(node::NodeGaussian, edge_id::String)
-    "Compute message forward to x"
+    "Compute message to each edge"
 
     # Get edge name from edge id
     edge_name = key_from_value(node.connected_edges, edge_id)
 
-    # Expected mean
+    # Expectations over beliefs
     Em = mean(node.beliefs["mean"])
-
-    # Expected data
     Ex = mean(node.beliefs["data"])
-
-    # Expected precision
     Et = mean(node.beliefs["precision"])
 
     if edge_name == "data"
 
         # Supply sufficient statistics
-        message = Normal(EB*Ex, Et)
+        message = Normal(Em, Et)
 
     elseif edge_name == "mean"
 
@@ -110,8 +102,12 @@ function message(node::NodeGaussian, edge_id::String)
 
     elseif edge_name == "precision"
 
+        # Extract precisions from beliefs
+        Px = 1/var(node.beliefs["data"])
+        Pm = 1/var(node.beliefs["mean"])
+
         # Supply sufficient statistics
-        error("Exception: not implemented yet.")
+        message = Gamma(3/2, (Px + Pm + (Ex - Em)^2)/2)
 
     else
         throw("Exception: edge id unknown.")
@@ -127,7 +123,7 @@ function act(node::NodeGaussian, edge_id::String, graph::MetaGraph)
     outgoing_message = message(node, edge_id)
 
     # Pass message to edge
-    graph[edge_id, :object].messages = outgoing_message
+    eval(graph[graph[edge_id, :id], :object]).messages[node.id] = outgoing_message
 
     return Nothing
 end

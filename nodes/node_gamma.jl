@@ -1,111 +1,148 @@
-export "NodeGamma"
+export NodeGamma
 
 using Distributions: Gamma, params, mean
 using DataStructures: Queue, enqueue!, dequeue!
 using SpecialFunctions: gamma, digamma
+include("../util.jl")
 
-mutable struct "NodeGamma"
+mutable struct NodeGamma
+    """Gamma distribution node"""
 
-    # Factor graph properties
+    # Identifiers of edges/nodes in factor graph
     id::String
-    edges::Dict{String, Symbol}
+    beliefs::Dict{String, Any}
+    connected_edges::Dict{String, String}
 
-    # Message bookkeeping
-    messages::Dict{String, Gamma}
-    incoming_messages::Queue{Tuple{Gamma{Float64},Float64,String}}
-
-    # Parameters
-    shape::Float64
-    rate::Float64
-
-    # Node properties
+    # Reaction parameters
+    incoming::Queue{Tuple}
     threshold::Float64
+
+    # Additional properties
     verbose::Bool
 
-    function "NodeGamma"(outcome_edge_id::Symbol,
-                         shape::Float64,
-                         rate::Float64,
-                         id::String;
-                         threshold=0.0001,
-                         verbose=false)
+    function NodeGamma(id::String;
+                       edge_data=1.0,
+                       edge_shape=1.0,
+                       edge_rate=1.0,
+                       threshold=0.0,
+                       verbose=false)
 
-        # Edge id's
-        edges = Dict{String, Symbol}("outcome" => outcomes_edge_id)
+       # Keep track of recognition distributions
+       beliefs = Dict{String, Any}()
+       connected_edges = Dict{String, String}()
 
-        # Keep track of incoming messages
-        messages = Dict{String, Gamma}("outcome" => Gamma())
+       # Check for set parameters vs recognition distributions
+       if isa(edge_data, Float64)
+           beliefs["data"] = edge_data
+       else
+           connected_edges["data"] = edge_data
+           beliefs["data"] = Gamma()
+       end
+       if isa(edge_shape, Float64)
+           if edge_shape >= 0.0
+               beliefs["shape"] = edge_shape
+           else
+               error("Exception: shape should be non-negative.")
+           end
+       else
+           connected_edges["shape"] = edge_shape
+           beliefs["shape"] = Gamma()
+       end
+       if isa(edge_rate, Float64)
+           if edge_rate >= 0.0
+               beliefs["rate"] = edge_rate
+           else
+               error("Exception: rate should be non-negative.")
+           end
+       else
+           connected_edges["rate"] = edge_rate
+           beliefs["rate"] = Gamma()
+       end
 
-        # Incoming messages consist of distributions, delta Free Energy, and edge id's
-        incoming_messages = Queue{Tuple{Gamma{Float64}, Float64, String}}()
+       # Initialize queue for incoming messages
+       incoming = Queue{Tuple}()
 
-        # Create instance
-        self = new(id,
-                   edges,
-                   messages,
-                   incoming_messages,
-                   threshold,
-                   verbose)
-        return self
+       # Create instance
+       self = new(id, beliefs, connected_edges, incoming, threshold, verbose)
+       return self
     end
 end
 
-function energy(node::"NodeGamma")
+function energy(node::NodeGamma)
     "Compute internal energy of node"
 
-    # Expected mean
-    Ex = mean(node.messages["outcome"])
+    # Expectations over beliefs
+    Ea = mean(node.beliefs["shape"])
+    Eb = mean(node.beliefs["rate"])
+    Ex = mean(node.beliefs["data"])
 
-    # Hyperparameters
-    alpha = node.shape
-    beta = node.rate
-
-    # E_qx -log p(x|a,b)
-    return -log(gamma(alpha)) + alpha*log(beta) + (alpha - 1)*(digamma(alpha) - log(beta)) - beta*Ex
+    # E_qx E_qa E_qb -log p(x|a,b)
+    return -log(gamma(Ea)) + Ea*log(Eb) + (Ea - 1)*(digamma(Ea) - log(Eb)) - Eb*Ex
 end
 
-function message(node::"NodeGamma")
-    "Compute outgoing message"
+function message(node::NodeGamma, edge_id::String)
+    "Compute message to each edge"
 
-    # Supply sufficient parameters for Gamma as output message
-    return Gamma(node.shape, node.rate)
+    # Get edge name from edge id
+    edge_name = key_from_value(node.connected_edges, edge_id)
+
+    # Expectations over beliefs
+    Ea = mean(node.beliefs["shape"])
+    Eb = mean(node.beliefs["rate"])
+    Ex = mean(node.beliefs["data"])
+
+    if edge_name == "data"
+
+        # Supply sufficient statistics
+        message = Gamma(Ea, Eb)
+
+    elseif edge_name == "shape"
+        # Supply sufficient statistics
+        error("Exception: not implemented yet.")
+    elseif edge_name == "rate"
+        # Supply sufficient statistics
+        error("Exception: not implemented yet.")
+    else
+        throw("Exception: edge id unknown.")
+    end
+
+    return message
 end
 
-function act(node::"NodeGamma", edge_id::String)
+function act(node::NodeGamma, edge_id::String, graph::MetaGraph)
     "Send out message for one of the connecting edges"
 
     # Compute message for a particular edge
-    outgoing_message = message(node)
+    outgoing_message = message(node, edge_id)
 
-    # Push message in queue of connected edge
-    enqueue!(eval(node.edges[edge_id]).incoming_messages["top"], outgoing_message)
-    #TODO: avoid hard-coding edge id's
+    # Pass message to edge
+    eval(graph[graph[edge_id, :id], :object]).messages[node.id] = outgoing_message
 
     return Nothing
 end
 
-function react(node::"NodeGamma")
-    "Decide to react based on delta Free Energy"
+function react(node::NodeGamma, graph::MetaGraph)
+    "React to incoming messages from edges"
 
-    for n = 1:length(node.incoming_messages)
+    # Find edges attached to node
+    N = neighbors(graph, graph[node.id, :id])
+    edge_ids = [graph[n, :id] for n in N]
 
-        # Check current message
-        incoming_message, delta_free_energy, edge_in = dequeue!(node.incoming_messages)
+    # Loop over all edges that have produced incoming messages
+    for n = 1:length(node.incoming)
 
-        # Update edge
-        node.messages[edge_in] = incoming_message
+        # Extract the id of the edge and the communicated delta free energy
+        edge_id, delta_free_energy = dequeue!(node.incoming)
 
-        # Report dFE
-        if node.verbose
-            println("dFE = "*string(delta_free_energy))
-        end
+        # Check if change in free energy is sufficient to fire
+        if abs(delta_free_energy) >= node.threshold
 
-        # Check if change in energy is sufficient to fire
-        if abs(delta_free_energy) > node.threshold
-
-            for edge_out in setdiff(Set(keys(node.edges)), [edge_in])
-                act(node, edge_out)
+            # Loop over other edges
+            for edge_out in setdiff(Set(edge_ids), Set([edge_id]))
+                act(node, edge_out, graph)
             end
         end
     end
+
     return Nothing
 end
