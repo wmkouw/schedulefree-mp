@@ -86,54 +86,128 @@ mutable struct TransitionGaussian
 end
 
 function energy(node::TransitionGaussian)
-    "Compute internal energy of node"
+    """
+    Compute internal energy of node.
 
-    # Expectations over beliefs
-    EA = mean(node.beliefs["transition"])
-    EU = mean(node.beliefs["control"])
+    Assumes Gaussian distributions for x,m,a,u and Gamma for γ.
+    """
+    
+    # Moments of transition belief
+    Ea = mean(node.beliefs["transition"])
+    if isa(node.beliefs["transition"], Float64)
+        Va = 0.0
+    else
+        Va = var(node.beliefs["transition"])
+    end
+
+    # Moments of control belief
+    Eu = mean(node.beliefs["control"])
+    if isa(node.beliefs["control"], Float64)
+        Vu = 0.0
+    else
+        Vu = var(node.beliefs["control"])
+    end
+
+    # Moments of mean belief
     Em = mean(node.beliefs["mean"])
-    Ex = mean(node.beliefs["data"])
-    Et = mean(node.beliefs["precision"])
+    if isa(node.beliefs["mean"], Float64)
+        Vm = 0.0
+    else
+        Vm = var(node.beliefs["mean"])
+    end
 
-    # -log-likelihood of Gaussian with expected parameters
-    return 1/2 *log(2*pi) - log(Et) + 1/2 *(Ex - (EA*Em+EU))'*Et*(Ex - (EA*Em+EU))
+    # Moments of data belief
+    Ex = mean(node.beliefs["data"])
+    if isa(node.beliefs["data"], Float64)
+        Vx = 0.0
+    else
+        Vx = var(node.beliefs["data"])
+    end
+
+    # Moments of precision belief
+    Eγ = mean(node.beliefs["precision"])
+
+    # Check whether precision is clamped
+    if isa(node.beliefs["precision"], Gamma)
+
+        # Extract parameters
+        shape, scale = params(node.beliefs["precision"])
+
+        # -log-likelihood of Gaussian with expected parameters
+        return -1/2*log(2*pi) + 1/2*(digamma(shape) + log(scale)) - Eγ/2*((Vx+Ex^2) -2*Ex*Em*Ea + (Vm+Em^2)*(Va+Ea^2))
+
+    else
+        # -log-likelihood of Gaussian with expected parameters
+        return -1/2*log(2*pi) + 1/2*log(Eγ) - Eγ/2*((Vx+Ex^2) -2*Ex*Em*Ea + (Vm+Em^2)*(Va+Ea^2))
+    end
+    # TODO: incorporate control
 end
 
 function message(node::TransitionGaussian, edge_id::String)
-    "Compute message forward to x"
+    """
+    Compute messages to each edge.
+
+    Assumes Gaussian distributions for x,m,a,u and Gamma for γ.
+    """
 
     # Get edge name from edge id
     edge_name = key_from_value(node.connected_edges, edge_id)
 
-    # Expectations over beliefs
-    EA = mean(node.beliefs["transition"])
-    EU = mean(node.beliefs["control"])
+    # Moments of transition belief
+    Ea = mean(node.beliefs["transition"])
+    if isa(node.beliefs["transition"], Float64)
+        Va = 0.0
+    else
+        Va = var(node.beliefs["transition"])
+    end
+
+    # Moments of control belief
+    Eu = mean(node.beliefs["control"])
+    if isa(node.beliefs["control"], Float64)
+        Vu = 0.0
+    else
+        Vu = var(node.beliefs["control"])
+    end
+
+    # Moments of mean belief
     Em = mean(node.beliefs["mean"])
+    if isa(node.beliefs["mean"], Float64)
+        Vm = 0.0
+    else
+        Vm = var(node.beliefs["mean"])
+    end
+
+    # Moments of data belief
     Ex = mean(node.beliefs["data"])
-    Et = mean(node.beliefs["precision"])
+    if isa(node.beliefs["data"], Float64)
+        Vx = 0.0
+    else
+        Vx = var(node.beliefs["data"])
+    end
+
+    # Moments of precision belief
+    Eγ = mean(node.beliefs["precision"])
 
     if edge_name == "data"
 
         # Supply sufficient statistics
-        message = Normal(EA*Em + EU, inv(Et))
+        message = Normal(Ea*Em, inv(Eγ))
 
     elseif edge_name == "mean"
 
         # Supply sufficient statistics
-        message = Normal(Ex, inv(Et))
+        message = Normal(Ex*Ea / (Va + Ea^2), inv(Eγ*(Va + Ea^2)))
 
     elseif edge_name == "precision"
 
-        # Extract precisions from beliefs
-        Sx = var(node.beliefs["data"])
-        Sm = var(node.beliefs["mean"])
-
         # Supply sufficient statistics
-        message = Gamma(3/2, (Sx + Sm + (Ex - Em)^2)/2)
+        rate = (inv(Vx) + inv(Vm) + (Ex - Em)^2)/2
+        message = Gamma(3/2, 1/rate)
 
     elseif edge_name == "transition"
 
-        error("Exception: not implemented yet.")
+        # Supply sufficient statistics
+        message = Normal(Ex*Em/(Vm + Em^2), Eγ*(Vm + Em^2))
 
     elseif edge_name == "control"
 

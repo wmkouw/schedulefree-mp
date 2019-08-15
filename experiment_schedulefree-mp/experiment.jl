@@ -1,4 +1,6 @@
-# Schedule-free message-passing in linear Gaussian dynamical system
+# Reactive message-passing in linear Gaussian dynamical system
+# Experiment to pass messages without a schedule
+#
 # Wouter Kouw, BIASlab
 # 12-08-2019
 
@@ -32,23 +34,23 @@ Experiment parameters
 T = 100
 
 # Reaction-time clock
-TT = 5
+TT = 10
 
 # Known transition and observation matrices
-transition_matrix = 0.8
-emission_matrix = 1.0
+transition_coefficient = 0.8
+emission_coefficient = 1.0
 
 # Known noises
-process_noise = 10.
-measurement_noise = 2.0
+process_noise = 2.0
+measurement_noise = 0.5
 
 # Parameters for state x_0
 mean_0 = 0.0
 precision_0 = 1.0
 
 # Generate data
-observed, hidden = gendata_LGDS(transition_matrix,
-                                emission_matrix,
+observed, hidden = gendata_LGDS(transition_coefficient,
+                                emission_coefficient,
                                 process_noise,
                                 measurement_noise,
                                 mean_0,
@@ -69,7 +71,6 @@ Below, we specify the following model through the time-slice subgraph
             g_t       |
                       |
                      |_| f_t
-                      |
                       |
                       ∘
                      y_t
@@ -132,7 +133,7 @@ for t = 1:T
     global g_t = TransitionGaussian("g_t", edge_mean="x_tmin", edge_data="x_t", edge_precision=inv(process_noise))
 
     # Current state
-    global x_t = EdgeGaussian("x_t", mean=x_tmin.mean, precision=x_tmin.precision)
+    global x_t = EdgeGaussian("x_t", mean=0.0, precision=1.0)
 
     # Observation likelihood node
     global f_t = LikelihoodGaussian("f_t", edge_mean="x_t", edge_data="y_t", edge_precision=inv(measurement_noise))
@@ -147,12 +148,14 @@ for t = 1:T
     for tt = 1:TT
         react(g_t, graph)
         react(x_t, graph)
+        println(x_t.messages)
+        println(f_t.incoming)
         react(f_t, graph)
         react(y_t, graph)
 
         # Write out estimated state parameters
         estimated_states[t, 1, tt] = x_t.mean
-        estimated_states[t, 2, tt] = x_t.precision
+        estimated_states[t, 2, tt] = sqrt(1/x_t.precision)
     end
 end
 
@@ -165,7 +168,7 @@ if viz
     plot(hidden[2:end], color="red", label="states")
     plot!(estimated_states[:,1,end], color="blue", label="estimates")
     plot!(estimated_states[:,1,end],
-          ribbon=[1/estimated_states[:,2,end], 1/estimated_states[:,2,end]],
+          ribbon=[estimated_states[:,2,end], estimated_states[:,2,end]],
           linewidth=2,
           color="blue",
           fillalpha=0.2,
@@ -180,7 +183,7 @@ if viz
     t = 100
     plot(estimated_states[t,1,:], color="blue", label="q(x_"*string(t)*")")
     plot!(estimated_states[t,1,:],
-          ribbon=[1/estimated_states[t,2,:], 1/estimated_states[t,2,:]],
+          ribbon=[estimated_states[t,2,:], estimated_states[t,2,:]],
           linewidth=2,
           color="blue",
           fillalpha=0.2,

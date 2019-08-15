@@ -38,7 +38,7 @@ mutable struct NodeGaussian
             beliefs["data"] = Normal()
         end
         if isa(edge_mean, Float64)
-            belief["mean"] = edge_mean
+            beliefs["mean"] = edge_mean
         else
             connected_edges["mean"] = edge_mean
             beliefs["mean"] = Normal()
@@ -64,50 +64,90 @@ mutable struct NodeGaussian
 end
 
 function energy(node::NodeGaussian)
-    "Compute internal energy of node"
+    """
+    Compute internal energy of node.
 
-    # Expected mean
+    Assumes Gaussian distributions for x,m and Gamma for γ.
+    """
+
+    # Moments of mean belief
     Em = mean(node.beliefs["mean"])
+    if isa(node.beliefs["mean"], Float64)
+        Vm = 0.0
+    else
+        Vm = var(node.beliefs["mean"])
+    end
 
-    # Expected data
+    # Moments of data belief
     Ex = mean(node.beliefs["data"])
+    if isa(node.beliefs["data"], Float64)
+        Vx = 0.0
+    else
+        Vx = var(node.beliefs["data"])
+    end
 
-    # Expected precision
-    Et = mean(node.beliefs["precision"])
+    # Moments of precision belief
+    Eγ = mean(node.beliefs["precision"])
 
-    # -log-likelihood of Gaussian with expected parameters
-    return 1/2 *log(2*pi) - log(Et) + 1/2 *(Ex - Ex)'*Et*(Ex - Ex)
+    # Check whether precision is clamped
+    if isa(node.beliefs["precision"], Gamma)
+
+        # Extract parameters
+        shape, scale = params(node.beliefs["precision"])
+
+        # -log-likelihood of Gaussian with expected parameters
+        return -1/2*log(2*pi) + 1/2*(digamma(shape) + log(scale)) - Eγ/2*((Vx+Ex^2) -2*Ex*Em + (Vm+Em^2))
+
+    else
+        # -log-likelihood of Gaussian with expected parameters
+        return -1/2*log(2*pi) + 1/2*log(Eγ) - Eγ/2*((Vx+Ex^2) -2*Ex*Em + (Vm+Em^2))
+    end
 end
 
 function message(node::NodeGaussian, edge_id::String)
-    "Compute message to each edge"
+    """
+    Compute messages to each edge.
+
+    Assumes Gaussian distributions for x,m,a,u and Gamma for γ.
+    """
 
     # Get edge name from edge id
     edge_name = key_from_value(node.connected_edges, edge_id)
 
-    # Expectations over beliefs
+    # Moments of mean belief
     Em = mean(node.beliefs["mean"])
+    if isa(node.beliefs["mean"], Float64)
+        Vm = 0.0
+    else
+        Vm = var(node.beliefs["mean"])
+    end
+
+    # Moments of data belief
     Ex = mean(node.beliefs["data"])
-    Et = mean(node.beliefs["precision"])
+    if isa(node.beliefs["data"], Float64)
+        Vx = 0.0
+    else
+        Vx = var(node.beliefs["data"])
+    end
+
+    # Moments of precision belief
+    Eγ = mean(node.beliefs["precision"])
 
     if edge_name == "data"
 
         # Supply sufficient statistics
-        message = Normal(Em, Et)
+        message = Normal(Em, inv(Eγ))
 
     elseif edge_name == "mean"
 
         # Supply sufficient statistics
-        message = Normal(Ex, Et)
+        message = Normal(Ex, inv(Eγ))
 
     elseif edge_name == "precision"
 
-        # Extract precisions from beliefs
-        Px = 1/var(node.beliefs["data"])
-        Pm = 1/var(node.beliefs["mean"])
-
         # Supply sufficient statistics
-        message = Gamma(3/2, (Px + Pm + (Ex - Em)^2)/2)
+        rate = (inv(Vx) + inv(Vm) + (Ex - Em)^2)/2
+        message = Gamma(3/2, 1/rate)
 
     else
         throw("Exception: edge id unknown.")

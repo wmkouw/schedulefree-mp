@@ -94,7 +94,7 @@ function message(node::NodeGamma, edge_id::String)
     if edge_name == "data"
 
         # Supply sufficient statistics
-        message = Gamma(Ea, Eb)
+        message = Gamma(Ea, 1/Eb)
 
     elseif edge_name == "shape"
         # Supply sufficient statistics

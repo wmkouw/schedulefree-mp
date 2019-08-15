@@ -1,5 +1,5 @@
-# Reactive message-passing in linear Gaussian dynamical system
-# Experiment to infer process noise
+# Reactive message-passing in linear Gaussian dynamical system.
+# Experiment to infer transition coefficients.
 #
 # Wouter Kouw, BIASlab
 # 15-08-2019
@@ -10,7 +10,6 @@ using DataStructures
 using LightGraphs, MetaGraphs
 using Plots
 gr()
-
 
 # Factor graph components
 include("../nodes/node_gamma.jl")
@@ -36,7 +35,7 @@ T = 100
 TT = 20
 
 # Known transition and observation matrices
-transition_coefficient = 1.0
+transition_coefficient = 0.8
 emission_coefficient = 1.0
 
 # Noise parameters
@@ -45,7 +44,8 @@ process_noise = 1.0
 
 # Clamped parameters
 x_0_params = [0.0, 1.0]
-h_t_params = [0.0001, 0.0001]
+Γ_params = [0.1, 0.1]
+A_params = [0.0, 1.0]
 
 # Generate data
 observed, hidden = gendata_LGDS(transition_coefficient,
@@ -64,30 +64,32 @@ p(y_{1:T}, x_{0:T} | u_{1:T}) = p(x_0) Π_t p(y_t, x_t | x_{t-1})
 
 In other words, Markov chains of time-slices of a state-space models.
 Below, we specify the following model through the time-slice subgraph
-             _
-            |_| h_t
-             |
-             ∘ γ_t
-    x_t-1    |       x_t
-... --∘---->|_|----->|=|-----> ...
-            g_t       |
-                      |
-                     |_| f_t
-                      |
-                      ∘
-                     y_t
+             _     _
+          A |_|   |_| Γ
+             |     |
+         a_t ∘     ∘ γ_t
+             |_____|       x_t
+.. ---∘---->|_______|----->|=|-----> ...
+    x_t-1      g_t          |
+                            |
+                           |_| f_t
+                            |
+                            ∘
+                           y_t
 
-x_t-1 = previous state edge
-g_t = state transition edge
-γ_t = process noise edge
-h_t = process noise prior node
-x_t = current state edge
-f_t = likelihood node
-y_t = observation node
+x_t-1   = previous state edge
+g_t     = state transition edge
+γ_t     = process noise edge
+γ       = process noise prior node
+a_t     = transition coefficient edge
+A       = transition coefficient prior node
+x_t     = current state edge
+f_t     = likelihood node
+y_t     = observation node
 """
 
 # Start graph
-graph = MetaGraph(SimpleGraph(7))
+graph = MetaGraph(SimpleGraph(9))
 
 # Previous state edge
 x_tmin = EdgeGaussian("x_tmin")
@@ -102,27 +104,37 @@ set_props!(graph, 2, Dict{Symbol,Any}(:object => :g_t, :id => "g_t"))
 set_props!(graph, 3, Dict{Symbol,Any}(:object => :γ_t, :id => "γ_t"))
 
 # Process noise prior node
-h_t = NodeGamma("h_t")
-set_props!(graph, 4, Dict{Symbol,Any}(:object => :h_t, :id => "h_t"))
+Γ = NodeGamma("Γ")
+set_props!(graph, 4, Dict{Symbol,Any}(:object => :Γ, :id => "Γ"))
+
+# Transition coefficient edge
+a_t = EdgeGaussian("a_t")
+set_props!(graph, 5, Dict{Symbol,Any}(:object => :a_t, :id => "a_t"))
+
+# Transition coefficient prior node
+A = NodeGaussian("A")
+set_props!(graph, 6, Dict{Symbol,Any}(:object => :A, :id => "A"))
 
 # Current state edge
 x_t = EdgeGaussian("x_t")
-set_props!(graph, 5, Dict{Symbol,Any}(:object => :x_t, :id => "x_t"))
+set_props!(graph, 7, Dict{Symbol,Any}(:object => :x_t, :id => "x_t"))
 
 # Observation likelihood node
 f_t = LikelihoodGaussian("f_t")
-set_props!(graph, 6, Dict{Symbol,Any}(:object => :f_t, :id => "f_t"))
+set_props!(graph, 8, Dict{Symbol,Any}(:object => :f_t, :id => "f_t"))
 
 # Observation edge
 y_t = EdgeDelta("y_t")
-set_props!(graph, 7, Dict{Symbol,Any}(:object => :y_t, :id => "y_t"))
+set_props!(graph, 9, Dict{Symbol,Any}(:object => :y_t, :id => "y_t"))
 
-add_edge!(graph, 1, 2)
-add_edge!(graph, 2, 5)
-add_edge!(graph, 3, 2)
-add_edge!(graph, 3, 4)
-add_edge!(graph, 5, 6)
-add_edge!(graph, 6, 7)
+add_edge!(graph, 1, 2) # x_t-1 -- g_t
+add_edge!(graph, 2, 3) # g_t -- γ_t
+add_edge!(graph, 3, 4) # γ_t -- Γ
+add_edge!(graph, 2, 5) # g_t -- a_t
+add_edge!(graph, 5, 6) # a_t -- A
+add_edge!(graph, 2, 7) # g_t -- x_t
+add_edge!(graph, 7, 8) # x_t -- f_t
+add_edge!(graph, 8, 9) # f_t -- y_t
 
 # Ensure vertices can be recalled from given id
 set_indexing_prop!(graph, :id)
@@ -135,11 +147,13 @@ Run inference procedure
 # Preallocation
 estimated_states = zeros(T, 2, TT)
 estimated_noises = zeros(T, 2, TT)
+estimated_transition = zeros(T, 2, TT)
 
 # Set state prior x_0
 global x_t = EdgeGaussian("x_0"; mean=x_0_params[1], precision=x_0_params[2])
 
 for t = 1:T
+    # t=1
 
       # Report progress
       if mod(t, T/10) == 1
@@ -150,13 +164,19 @@ for t = 1:T
       global x_tmin = EdgeGaussian("x_tmin", mean=x_t.mean, precision=x_t.precision)
 
       # State transition node
-      global g_t = TransitionGaussian("g_t", edge_mean="x_tmin", edge_data="x_t", edge_precision="γ_t")
+      global g_t = TransitionGaussian("g_t", edge_mean="x_tmin", edge_data="x_t", edge_precision="γ_t", edge_transition="a_t")
 
       # Process noise edge
       global γ_t = EdgeGamma("γ_t", shape=1.0, rate=0.1)
 
       # Process noise prior node
-      global h_t = NodeGamma("h_t", edge_data="γ_t", edge_shape=h_t_params[1], edge_rate=h_t_params[2])
+      global Γ = NodeGamma("Γ", edge_data="γ_t", edge_shape=Γ_params[1], edge_rate=Γ_params[2])
+
+      # Transition coefficient edge
+      global a_t = EdgeGaussian("a_t", mean=0.0, precision=1.0)
+
+      # Transition coefficient prior node
+      global A = NodeGaussian("A", edge_data="a_t", edge_mean=A_params[1], edge_precision=A_params[2])
 
       # Current state
       global x_t = EdgeGaussian("x_t", mean=0.0, precision=1.0)
@@ -175,7 +195,9 @@ for t = 1:T
 
           react(g_t, graph)
           react(γ_t, graph)
-          react(h_t, graph)
+          react(Γ, graph)
+          react(a_t, graph)
+          react(A, graph)
           react(x_t, graph)
           react(f_t, graph)
           react(y_t, graph)
@@ -185,6 +207,8 @@ for t = 1:T
           estimated_states[t, 2, tt] = sqrt(1/x_t.precision)
           estimated_noises[t, 1, tt] = γ_t.shape / γ_t.rate
           estimated_noises[t, 2, tt] = γ_t.shape / γ_t.rate^2
+          estimated_transition[t, 1, tt] = a_t.mean
+          estimated_transition[t, 2, tt] = sqrt(1/a_t.precision)
       end
 end
 
@@ -205,21 +229,7 @@ plot!(estimated_states[:,1,end],
 scatter!(observed, color="black", markersize=3, label="observations")
 xlabel!("time (t)")
 title!("State estimates, q(x_t)")
-savefig(pwd()*"/experiment_infer-processnoise/viz/state_estimates.png")
-
-# Visualize final noise estimates over time
-plot(process_noise*ones(T,1), color="black", label="true process noise", linewidth=2)
-plot!(estimated_noises[:,1,end], color="blue", label="estimates")
-plot!(estimated_noises[:,1,end],
-      ribbon=[estimated_noises[:,2,end], estimated_noises[:,2,end]],
-      linewidth=2,
-      color="blue",
-      fillalpha=0.2,
-      fillcolor="blue",
-      label="")
-xlabel!("time (t)")
-title!("Noise estimates, q(γ_t)")
-savefig(pwd()*"/experiment_infer-processnoise/viz/noise_estimates.png")
+savefig(pwd()*"/experiment_infer-coefficients/viz/state_estimates.png")
 
 # Visualize state belief parameter trajectory
 t = T
@@ -233,18 +243,32 @@ plot!(estimated_states[t,1,1:end],
       label="")
 xlabel!("iterations")
 title!("Parameter trajectory of q(x_t) for t="*string(t))
-savefig(pwd()*"/experiment_infer-processnoise/viz/state_parameter_trajectory_t" * string(t) * ".png")
+savefig(pwd()*"/experiment_infer-coefficients/viz/state_parameter_trajectory_t" * string(t) * ".png")
 
-# Visualize noise belief parameter trajectory
+# Visualize final transition coefficient estimates over time
+plot(transition_coefficient*ones(T,1), color="black", label="transition")
+plot!(estimated_transition[:,1,end], color="blue", label="estimates")
+plot!(estimated_transition[:,1,end],
+      ribbon=[estimated_transition[:,2,end], estimated_transition[:,2,end]],
+      linewidth=2,
+      color="blue",
+      fillalpha=0.2,
+      fillcolor="blue",
+      label="")
+xlabel!("time (t)")
+title!("Transition coefficient estimates, q(a_t)")
+savefig(pwd()*"/experiment_infer-coefficients/viz/transition_estimates.png")
+
+# Visualize transition coefficient belief parameter trajectory
 t = T
-plot(estimated_noises[t,1,1:end], color="blue", label="q(γ_"*string(t)*")")
-plot!(estimated_noises[t,1,1:end],
-      ribbon=[estimated_noises[t,2,1:end], estimated_noises[t,2,1:end]],
+plot(estimated_transition[t,1,1:end], color="blue", label="q(a_"*string(t)*")")
+plot!(estimated_transition[t,1,1:end],
+      ribbon=[estimated_transition[t,2,1:end], estimated_transition[t,2,1:end]],
       linewidth=2,
       color="blue",
       fillalpha=0.2,
       fillcolor="blue",
       label="")
 xlabel!("iterations")
-title!("Parameter trajectory of q(γ_t) for t="*string(t))
-savefig(pwd()*"/experiment_infer-processnoise/viz/noise_parameter_trajectory_t" * string(t) * ".png")
+title!("Parameter trajectory of q(a_t) for t="*string(t))
+savefig(pwd()*"/experiment_infer-coefficients/viz/transition_parameter_trajectory_t" * string(t) * ".png")

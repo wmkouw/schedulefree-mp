@@ -47,10 +47,10 @@ function update(edge::EdgeGamma)
     for key in keys(edge.messages)
 
         # Extract parameters
-        shape, rate = params(edge.messages[key])
+        shape, scale = params(edge.messages[key])
 
         new_shape += shape
-        new_rate += rate
+        new_rate += 1/scale
     end
 
     # Correct shape update
@@ -62,7 +62,7 @@ end
 
 function belief(edge::EdgeGamma)
     "Outgoing message"
-    return Gamma(edge.shape, edge.rate)
+    return Gamma(edge.shape, 1/edge.rate)
 end
 
 function entropy(edge::EdgeGamma)
