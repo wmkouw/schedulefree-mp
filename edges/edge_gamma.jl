@@ -41,20 +41,21 @@ end
 function update(edge::EdgeGamma)
     "Update recognition distribution as the product of messages"
 
-    edge.shape = 0
-    edge.rate = 0
+    new_shape = 0
+    new_rate = 0
 
     for key in keys(edge.messages)
 
         # Extract parameters
         shape, rate = params(edge.messages[key])
 
-        edge.shape += shape
-        edge.rate += rate
+        new_shape += shape
+        new_rate += rate
     end
 
     # Correct shape update
-    edge.shape -= 1
+    edge.shape = new_shape - 1
+    edge.rate = new_rate
 
     return Nothing
 end

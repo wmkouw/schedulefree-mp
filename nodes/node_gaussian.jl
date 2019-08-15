@@ -144,8 +144,12 @@ function react(node::NodeGaussian, graph::MetaGraph)
         # Check if change in free energy is sufficient to fire
         if abs(delta_free_energy) >= node.threshold
 
-            for edge_out in setdiff(Set(edge_ids), Set([edge_id]))
-                act(node, edge_out, graph)
+            if length(edge_ids) == 1
+                act(node, edge_ids[1], graph)
+            else
+                for edge_out in setdiff(Set(edge_ids), Set([edge_id]))
+                    act(node, edge_out, graph)
+                end
             end
         end
     end

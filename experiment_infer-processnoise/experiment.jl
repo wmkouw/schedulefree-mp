@@ -5,9 +5,10 @@
 using Revise
 using Distributions
 using DataStructures
-using LightGraphs
-using MetaGraphs
+using LightGraphs, MetaGraphs
 using Plots
+gr()
+
 
 # Factor graph components
 include("../nodes/node_gamma.jl")
@@ -30,29 +31,27 @@ Experiment parameters
 T = 100
 
 # Reaction-time clock
-TT = 5
+TT = 20
 
 # Known transition and observation matrices
 transition_matrix = 1.0
 emission_matrix = 1.0
 
 # Noise parameters
-measurement_noise = 0.5
-process_noise_shape = 1.0
-process_noise_rate = 3.0
-process_noise = process_noise_shape/process_noise_rate
+measurement_noise = 1.0
+process_noise = 1.0
 
-# Parameters for state x_0
-mean_0 = 0.0
-precision_0 = 1.0
+# Clamped parameters
+x_0_params = [0.0, 1.0]
+h_t_params = [0.1, 0.1]
 
 # Generate data
 observed, hidden = gendata_LGDS(transition_matrix,
                                 emission_matrix,
                                 process_noise,
                                 measurement_noise,
-                                mean_0,
-                                precision_0,
+                                x_0_params[1],
+                                x_0_params[2],
                                 time_horizon=T)
 
 """
@@ -137,7 +136,7 @@ estimated_states = zeros(T, 2, TT)
 estimated_noises = zeros(T, 2, TT)
 
 # Set state prior x_0
-global x_t = EdgeGaussian("x_0"; mean=mean_0, precision=precision_0)
+global x_t = EdgeGaussian("x_0"; mean=x_0_params[1], precision=x_0_params[2])
 
 for t = 1:T
 
@@ -153,13 +152,13 @@ for t = 1:T
       global g_t = TransitionGaussian("g_t", edge_mean="x_tmin", edge_data="x_t", edge_precision="γ_t")
 
       # Process noise edge
-      global γ_t = EdgeGamma("γ_t")
+      global γ_t = EdgeGamma("γ_t", shape=1.0, rate=0.1)
 
       # Process noise prior node
-      global h_t = NodeGamma("h_t", edge_data="γ_t", edge_shape=process_noise_shape, edge_rate=process_noise_rate)
+      global h_t = NodeGamma("h_t", edge_data="γ_t", edge_shape=h_t_params[1], edge_rate=h_t_params[2])
 
       # Current state
-      global x_t = EdgeGaussian("x_t", mean=x_tmin.mean, precision=x_tmin.precision)
+      global x_t = EdgeGaussian("x_t", mean=0.0, precision=1.0)
 
       # Observation likelihood node
       global f_t = LikelihoodGaussian("f_t", edge_mean="x_t", edge_data="y_t", edge_precision=inv(measurement_noise))
@@ -182,7 +181,7 @@ for t = 1:T
 
           # Write out estimated state parameters
           estimated_states[t, 1, tt] = x_t.mean
-          estimated_states[t, 2, tt] = x_t.precision
+          estimated_states[t, 2, tt] = sqrt(1/x_t.precision)
           estimated_noises[t, 1, tt] = γ_t.shape / γ_t.rate
           estimated_noises[t, 2, tt] = γ_t.shape / γ_t.rate^2
       end
@@ -196,48 +195,55 @@ Visualize experimental results
 plot(hidden[2:end], color="red", label="states")
 plot!(estimated_states[:,1,end], color="blue", label="estimates")
 plot!(estimated_states[:,1,end],
-      ribbon=[1/estimated_states[:,2,end], 1/estimated_states[:,2,end]],
+      ribbon=[estimated_states[:,2,end], estimated_states[:,2,end]],
       linewidth=2,
       color="blue",
       fillalpha=0.2,
       fillcolor="blue",
       label="")
-scatter!(observed, color="black", label="observations")
-title!("Final state estimates")
+scatter!(observed, color="black", markersize=3, label="observations")
+xlabel!("time (t)")
+title!("State estimates, q(x_t)")
 savefig(pwd()*"/experiment_infer-processnoise/viz/state_estimates.png")
 
 # Visualize final noise estimates over time
-plot(estimated_noises[:,1,end], color="blue", label="estimates")
+plot(process_noise*ones(T,1), color="black", label="true process noise", linewidth=2)
+plot!(estimated_noises[:,1,end], color="blue", label="estimates")
 plot!(estimated_noises[:,1,end],
-      ribbon=[1/estimated_noises[:,2,end], 1/estimated_noises[:,2,end]],
+      ribbon=[estimated_noises[:,2,end], estimated_noises[:,2,end]],
       linewidth=2,
       color="blue",
       fillalpha=0.2,
       fillcolor="blue",
       label="")
-title!("Final noise estimates")
+xlabel!("time (t)")
+title!("Noise estimates, q(γ_t)")
 savefig(pwd()*"/experiment_infer-processnoise/viz/noise_estimates.png")
 
 # Visualize state belief parameter trajectory
-t = 100
-plot(estimated_states[t,1,:], color="blue", label="q(x_"*string(t)*")")
-plot!(estimated_states[t,1,:],
-      ribbon=[1/estimated_states[t,2,:], 1/estimated_states[t,2,:]],
+t = T
+plot(estimated_states[t,1,1:end], color="blue", label="q(x_"*string(t)*")")
+plot!(estimated_states[t,1,1:end],
+      ribbon=[estimated_states[t,2,1:end], estimated_states[t,2,1:end]],
       linewidth=2,
       color="blue",
       fillalpha=0.2,
       fillcolor="blue",
       label="")
+xlabel!("iterations")
+title!("Parameter trajectory of q(x_t) for t="*string(t))
 savefig(pwd()*"/experiment_infer-processnoise/viz/state_parameter_trajectory_t" * string(t) * ".png")
 
 # Visualize noise belief parameter trajectory
-t = 100
-plot(estimated_noises[t,1,:], color="blue", label="q(γ_"*string(t)*")")
-plot!(estimated_noises[t,1,:],
-      ribbon=[1/estimated_noises[t,2,:], 1/estimated_noises[t,2,:]],
+t = T
+plot(estimated_noises[t,1,1:end], color="blue", label="q(γ_"*string(t)*")")
+plot!(estimated_noises[t,1,1:end],
+      ribbon=[estimated_noises[t,2,1:end], estimated_noises[t,2,1:end]],
       linewidth=2,
       color="blue",
       fillalpha=0.2,
       fillcolor="blue",
       label="")
+xlabel!("iterations")
+title!("Parameter trajectory of q(γ_t) for t="*string(t))
 savefig(pwd()*"/experiment_infer-processnoise/viz/noise_parameter_trajectory_t" * string(t) * ".png")

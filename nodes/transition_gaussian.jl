@@ -129,7 +129,6 @@ function message(node::TransitionGaussian, edge_id::String)
         Sm = var(node.beliefs["mean"])
 
         # Supply sufficient statistics
-        println((Sx + Sm + (Ex - Em)^2)/2)
         message = Gamma(3/2, (Sx + Sm + (Ex - Em)^2)/2)
 
     elseif edge_name == "transition"
