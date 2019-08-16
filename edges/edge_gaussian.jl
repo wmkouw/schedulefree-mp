@@ -82,7 +82,20 @@ end
 
 function entropy(edge::EdgeGaussian)
     "Entropy of Gaussian distribution"
-    return log(2*π * ℯ / edge.precision)/2
+    return 1/2*log(2*π * ℯ / edge.precision)
+end
+
+function gradient_entropy(edge::EdgeGaussian)
+    "Gradient of entropy of Gaussian evaluated for supplied parameters"
+
+    # Partial derivative with respect to mean
+    partial_mean = 0.0
+
+    # Partial derivative with respect to precision
+    partial_precision = -1/(2*edge.precision)
+
+    # Return tuple of partial derivatives
+    return (partial_mean, partial_precision)
 end
 
 function free_energy(edge::EdgeGaussian, graph::MetaGraph)

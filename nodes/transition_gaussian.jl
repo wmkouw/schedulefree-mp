@@ -40,7 +40,7 @@ mutable struct TransitionGaussian
 
         # Check for set parameters vs recognition distributions
         if isa(edge_data, Float64)
-            beliefs["data"] = edge_data
+            beliefs["data"] = Delta(edge_data)
         else
             connected_edges["data"] = edge_data
             beliefs["data"] = Normal()

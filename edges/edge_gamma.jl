@@ -2,7 +2,7 @@ export EdgeGamma
 
 using Distributions: Gamma, mean, params
 using DataStructures: Queue, enqueue!, dequeue!
-using SpecialFunctions: gamma, digamma
+using SpecialFunctions: gamma, digamma, polygamma
 
 mutable struct EdgeGamma
     """
@@ -84,6 +84,19 @@ function entropy(edge::EdgeGamma)
 
     # Entropy of a univariate Gamma
     return a - log(b) + log(gamma(a)) + (1-a)*digamma(a)
+end
+
+function grad_entropy(edge:EdgeGamma)
+    "Gradient of entropy of Gamma evaluated for supplied parameters"
+
+    # Partial derivative with respect to shape
+    partial_shape = 1 + (1 - edge.shape)*polygamma(1, edge.shape)
+
+    # Partial derivative with respect to rate
+    partial_rate = -1/edge.rate
+
+    # Return tuple of partial derivatives
+    return (partial_shape, partial_rate)
 end
 
 function free_energy(edge::EdgeGamma, graph::MetaGraph)

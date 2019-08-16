@@ -32,7 +32,12 @@ mutable struct EdgeDelta
 end
 
 function entropy(edge::EdgeDelta)
-    "An observed variable has no entropy"
+    "An observed variable has no entropy."
+    return 0.0
+end
+
+function gradient_entropy(edge:EdgeDelta)
+    "Gradient of entropy for observed variable is 0."
     return 0.0
 end
 
