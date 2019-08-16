@@ -7,6 +7,10 @@ using LightGraphs, MetaGraphs
 mutable struct EdgeGaussian
     """Edge with a Gaussian recognition distribution"""
 
+    # Factor graph properties
+    id::String
+    block::Bool
+
     # Recognition distribution parameters
     mean::Float64
     precision::Float64
@@ -15,10 +19,7 @@ mutable struct EdgeGaussian
     # Message bookkeeping
     messages::Dict{String, Normal}
 
-    # Edge id in factor graph
-    id::String
-
-    function EdgeGaussian(id; mean=0.0, precision=1.0, free_energy=1e12)
+    function EdgeGaussian(id; mean=0.0, precision=1.0, free_energy=1e12, block=false)
 
         # Check valid precision
         if precision <= 0
@@ -29,7 +30,7 @@ mutable struct EdgeGaussian
         messages = Dict{String, Normal}()
 
         # Construct instance
-        self = new(mean, precision, free_energy, messages, id)
+        self = new(id, block, mean, precision, free_energy, messages)
         return self
     end
 end
@@ -37,25 +38,40 @@ end
 function update(edge::EdgeGaussian)
     "Update recognition distribution as the product of messages"
 
-    # Loop over stored messages
-    total_precision = 0
-    weighted_mean = 0
-    for key in keys(edge.messages)
+    # Number of messages
+    num_messages = length(edge.messages)
 
-        # Extract parameters
-        mean, var = params(edge.messages[key])
+    if num_messages == 1
 
-        # Sum over precisions
-        total_precision += inv(var)
+        # Collect parameters from single message
+        mean, var = params(collect(values(edge.messages))[1])
 
-        # Compute weighted means
-        weighted_mean += inv(var)*mean
+        # Update parameters
+        edge.mean = mean
+        edge.precision = inv(var)
+
+    elseif num_messages >= 2
+
+        # Loop over stored messages
+        total_precision = 0
+        weighted_mean = 0
+        for key in keys(edge.messages)
+
+            # Extract parameters
+            mean, var = params(edge.messages[key])
+
+            # Sum over precisions
+            total_precision += inv(var)
+
+            # Compute weighted means
+            weighted_mean += inv(var)*mean
+        end
+
+        # Update variational parameters
+        edge.precision = total_precision
+        edge.mean = inv(total_precision)*weighted_mean
+
     end
-
-    # Update variational parameters
-    edge.precision = total_precision
-    edge.mean = inv(total_precision)*weighted_mean
-
     return Nothing
 end
 

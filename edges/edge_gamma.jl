@@ -5,9 +5,13 @@ using DataStructures: Queue, enqueue!, dequeue!
 using SpecialFunctions: gamma, digamma
 
 mutable struct EdgeGamma
-    "
+    """
     Edge with a Gamma recognition distribution
-    "
+    """
+    # Factor graph properties
+    id::String
+    block::Bool
+
     # Recognition distribution parameters
     shape::Float64
     rate::Float64
@@ -16,10 +20,7 @@ mutable struct EdgeGamma
     # Message bookkeeping
     messages::Dict{String, Gamma}
 
-    # Factor graph properties
-    id::String
-
-    function EdgeGamma(id; shape=1.0, rate=1.0, free_energy=1e12)
+    function EdgeGamma(id; shape=1.0, rate=1.0, free_energy=1e12, block=false)
 
         # Check valid parameters
         if shape < 0
@@ -33,7 +34,7 @@ mutable struct EdgeGamma
         messages = Dict{String, Gamma}()
 
         # Construct instance
-        self = new(shape, rate, free_energy, messages, id)
+        self = new(id, block, shape, rate, free_energy, messages)
         return self
     end
 end
@@ -41,23 +42,32 @@ end
 function update(edge::EdgeGamma)
     "Update recognition distribution as the product of messages"
 
-    new_shape = 0
-    new_rate = 0
+    # Number of messages
+    num_messages = length(edge.messages)
 
-    for key in keys(edge.messages)
+    if num_messages == 0
+        return Nothing
+    else
 
-        # Extract parameters
-        shape, scale = params(edge.messages[key])
+        new_shape = 0
+        new_rate = 0
+        for key in keys(edge.messages)
 
-        new_shape += shape
-        new_rate += 1/scale
+            # Extract parameters
+            shape, scale = params(edge.messages[key])
+
+            # Sum shape shape and rate parameters of each message
+            new_shape += shape
+            new_rate += 1/scale
+
+        end
+
+        # Correct shape update
+        edge.shape = new_shape - (num_messages-1)
+        edge.rate = new_rate
+
+        return Nothing
     end
-
-    # Correct shape update
-    edge.shape = new_shape - 1
-    edge.rate = new_rate
-
-    return Nothing
 end
 
 function belief(edge::EdgeGamma)

@@ -197,8 +197,16 @@ function act(node::LikelihoodGaussian, edge_id::String, graph::MetaGraph)
     # Compute message for a particular edge
     outgoing_message = message(node, edge_id)
 
-    # Pass message to edge
-    eval(graph[graph[edge_id, :id], :object]).messages[node.id] = outgoing_message
+    # Extract edge from graph
+    edge = eval(graph[graph[edge_id, :id], :object])
+
+    # Check if edge is blocked
+    if edge.block == false
+
+        # Pass message to edge
+        edge.messages[node.id] = outgoing_message
+
+    end
 
     return Nothing
 end

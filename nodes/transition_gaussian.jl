@@ -91,7 +91,7 @@ function energy(node::TransitionGaussian)
 
     Assumes Gaussian distributions for x,m,a,u and Gamma for γ.
     """
-    
+
     # Moments of transition belief
     Ea = mean(node.beliefs["transition"])
     if isa(node.beliefs["transition"], Float64)
@@ -207,7 +207,7 @@ function message(node::TransitionGaussian, edge_id::String)
     elseif edge_name == "transition"
 
         # Supply sufficient statistics
-        message = Normal(Ex*Em/(Vm + Em^2), Eγ*(Vm + Em^2))
+        message = Normal(Ex*Em/(Vm + Em^2), inv(Eγ*(Vm + Em^2)))
 
     elseif edge_name == "control"
 
@@ -226,9 +226,16 @@ function act(node::TransitionGaussian, edge_id::String, graph::MetaGraph)
     # Compute message for a particular edge
     outgoing_message = message(node, edge_id)
 
-    # Pass message to edge
-    eval(graph[graph[edge_id, :id], :object]).messages[node.id] = outgoing_message
+    # Extract edge from graph
+    edge = eval(graph[graph[edge_id, :id], :object])
 
+    # Check if edge is blocked
+    if edge.block == false
+
+        # Pass message to edge
+        edge.messages[node.id] = outgoing_message
+
+    end
     return Nothing
 end
 

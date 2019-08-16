@@ -9,6 +9,7 @@ mutable struct EdgeDelta
 
     # Factor graph properties
     id::String
+    block::Bool
 
     # Distribution parameters
     observation::Float64
@@ -17,7 +18,7 @@ mutable struct EdgeDelta
     # Message bookkeeping
     messages::Dict{String, Any}
 
-    function EdgeDelta(id; observation=NaN)
+    function EdgeDelta(id; block=false, observation=NaN)
 
         # Initialize messages
         messages = Dict{String, Any}()
@@ -25,7 +26,7 @@ mutable struct EdgeDelta
         # Initialize free energy
         free_energy = Inf
 
-        self = new(id, observation, free_energy, messages)
+        self = new(id, block, observation, free_energy, messages)
         return self
     end
 end

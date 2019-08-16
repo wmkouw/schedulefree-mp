@@ -39,13 +39,13 @@ transition_coefficient = 0.8
 emission_coefficient = 1.0
 
 # Noise parameters
-measurement_noise = 1.0
-process_noise = 1.0
+measurement_noise = 0.5
+process_noise = 0.5
 
 # Clamped parameters
 x_0_params = [0.0, 1.0]
-Γ_params = [0.1, 0.1]
-A_params = [0.0, 1.0]
+Γ_params = [0.05, 0.01]
+A_params = [0.8, 1.0]
 
 # Generate data
 observed, hidden = gendata_LGDS(transition_coefficient,
@@ -151,6 +151,8 @@ estimated_transition = zeros(T, 2, TT)
 
 # Set state prior x_0
 global x_t = EdgeGaussian("x_0"; mean=x_0_params[1], precision=x_0_params[2])
+global a_t = EdgeGaussian("a_0"; mean=0.0, precision=0.1)
+global γ_t = EdgeGamma("γ_0"; shape=0.01, rate=0.01)
 
 for t = 1:T
     # t=1
@@ -167,19 +169,19 @@ for t = 1:T
       global g_t = TransitionGaussian("g_t", edge_mean="x_tmin", edge_data="x_t", edge_precision="γ_t", edge_transition="a_t")
 
       # Process noise edge
-      global γ_t = EdgeGamma("γ_t", shape=1.0, rate=0.1)
+      global γ_t = EdgeGamma("γ_t", shape=γ_t.shape, rate=γ_t.rate)
 
       # Process noise prior node
       global Γ = NodeGamma("Γ", edge_data="γ_t", edge_shape=Γ_params[1], edge_rate=Γ_params[2])
 
       # Transition coefficient edge
-      global a_t = EdgeGaussian("a_t", mean=0.0, precision=1.0)
+      global a_t = EdgeGaussian("a_t", mean=a_t.mean, precision=a_t.precision)
 
       # Transition coefficient prior node
       global A = NodeGaussian("A", edge_data="a_t", edge_mean=A_params[1], edge_precision=A_params[2])
 
       # Current state
-      global x_t = EdgeGaussian("x_t", mean=0.0, precision=1.0)
+      global x_t = EdgeGaussian("x_t", mean=x_tmin.mean, precision=x_tmin.precision)
 
       # Observation likelihood node
       global f_t = LikelihoodGaussian("f_t", edge_mean="x_t", edge_data="y_t", edge_precision=inv(measurement_noise))
