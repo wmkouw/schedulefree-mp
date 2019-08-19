@@ -23,7 +23,7 @@ mutable struct NodeGamma
     function NodeGamma(id::String;
                        edge_data=1.0,
                        edge_shape=1.0,
-                       edge_rate=1.0,
+                       edge_scale=1.0,
                        threshold=0.0,
                        verbose=false)
 
@@ -33,14 +33,14 @@ mutable struct NodeGamma
 
        # Check for set parameters vs recognition distributions
        if isa(edge_data, Float64)
-           beliefs["data"] = edge_data
+           beliefs["data"] = Delta(edge_data)
        else
            connected_edges["data"] = edge_data
            beliefs["data"] = Gamma()
        end
        if isa(edge_shape, Float64)
            if edge_shape >= 0.0
-               beliefs["shape"] = edge_shape
+               beliefs["shape"] = Delta(edge_shape)
            else
                error("Exception: shape should be non-negative.")
            end
@@ -48,15 +48,15 @@ mutable struct NodeGamma
            connected_edges["shape"] = edge_shape
            beliefs["shape"] = Gamma()
        end
-       if isa(edge_rate, Float64)
-           if edge_rate >= 0.0
-               beliefs["rate"] = edge_rate
+       if isa(edge_scale, Float64)
+           if edge_scale >= 0.0
+               beliefs["scale"] = Delta(edge_scale)
            else
-               error("Exception: rate should be non-negative.")
+               error("Exception: scale should be non-negative.")
            end
        else
-           connected_edges["rate"] = edge_rate
-           beliefs["rate"] = Gamma()
+           connected_edges["scale"] = edge_scale
+           beliefs["scale"] = Gamma()
        end
 
        # Initialize queue for incoming messages
@@ -69,39 +69,52 @@ mutable struct NodeGamma
 end
 
 function energy(node::NodeGamma)
-    "Compute internal energy of node"
+    """
+    Compute internal energy of node
+
+    For now, this function assumes that parameters a,θ are clamped to particular
+    values. If they are (non-Gamma) distributions, i.e. q(a)q(θ), then
+    E_q(a)[log(a)] =/= ψ(a) + log(θ) for instance.
+    """
+    if ~isa(node.beliefs["shape"], Delta) and ~isa(node.beliefs["scale"], Delta)
+        error("Energy functional not known for belief on gamma parameters.")
+    end
 
     # Expectations over beliefs
     Ea = mean(node.beliefs["shape"])
-    Eb = mean(node.beliefs["rate"])
+    Eθ = mean(node.beliefs["scale"])
     Ex = mean(node.beliefs["data"])
 
-    # E_qx E_qa E_qb -log p(x|a,b)
-    return -log(gamma(Ea)) + Ea*log(Eb) + (Ea - 1)*(digamma(Ea) - log(Eb)) - Eb*Ex
+    # E_qx E_qa E_qθ -log Γ(x|a,θ)
+    return log(gamma(Ea)) + Ea*log(Eθ) - (Ea - 1)*(digamma(Ea) + log(Eθ)) + Ex/Eθ
 end
 
 function message(node::NodeGamma, edge_id::String)
-    "Compute message to each edge"
+    "Compute message to an edge"
 
     # Get edge name from edge id
     edge_name = key_from_value(node.connected_edges, edge_id)
 
     # Expectations over beliefs
     Ea = mean(node.beliefs["shape"])
-    Eb = mean(node.beliefs["rate"])
+    Eθ = mean(node.beliefs["scale"])
     Ex = mean(node.beliefs["data"])
 
     if edge_name == "data"
 
-        # Supply sufficient statistics
-        message = Gamma(Ea, 1/Eb)
+        # Pass message based on belief over parameters
+        message = Gamma(Ea, Eθ)
 
     elseif edge_name == "shape"
-        # Supply sufficient statistics
+
+        # Pass message based on belief over parameters
         error("Exception: not implemented yet.")
-    elseif edge_name == "rate"
-        # Supply sufficient statistics
+
+    elseif edge_name == "scale"
+
+        # Pass message based on belief over parameters
         error("Exception: not implemented yet.")
+
     else
         throw("Exception: edge id unknown.")
     end
@@ -115,8 +128,11 @@ function act(node::NodeGamma, edge_id::String, graph::MetaGraph)
     # Compute message for a particular edge
     outgoing_message = message(node, edge_id)
 
-    # Pass message to edge
-    eval(graph[graph[edge_id, :id], :object]).messages[node.id] = outgoing_message
+    # Find edge based on edge id
+    edge = eval(graph[graph[edge_id, :id], :object])
+
+    # Put message in edge's message box
+    edge.messages[node.id] = outgoing_message
 
     return Nothing
 end

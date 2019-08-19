@@ -14,27 +14,27 @@ mutable struct EdgeGamma
 
     # Recognition distribution parameters
     shape::Float64
-    rate::Float64
+    scale::Float64
     free_energy::Float64
 
     # Message bookkeeping
     messages::Dict{String, Gamma}
 
-    function EdgeGamma(id; shape=1.0, rate=1.0, free_energy=1e12, block=false)
+    function EdgeGamma(id; shape=1.0, scale=1.0, free_energy=1e12, block=false)
 
         # Check valid parameters
         if shape < 0
             throw("Exception: shape parameter should be larger than 0.")
         end
-        if rate < 0
-            throw("Exception: rate parameter should be larger than 0.")
+        if scale < 0
+            throw("Exception: scale parameter should be larger than 0.")
         end
 
         # Initialize messages
         messages = Dict{String, Gamma}()
 
         # Construct instance
-        self = new(id, block, shape, rate, free_energy, messages)
+        self = new(id, block, shape, scale, free_energy, messages)
         return self
     end
 end
@@ -46,25 +46,32 @@ function update(edge::EdgeGamma)
     num_messages = length(edge.messages)
 
     if num_messages == 0
+
         return Nothing
-    else
+
+    elseif num_messages == 1
+
+        # Extract parameters
+        edge.shape, edge.scale = params(collect(values(edge.messages))[1])
+
+    elseif num_messages >= 2
 
         new_shape = 0
-        new_rate = 0
+        new_scale = 0
         for key in keys(edge.messages)
 
             # Extract parameters
             shape, scale = params(edge.messages[key])
 
-            # Sum shape shape and rate parameters of each message
+            # Sum shape shape and scale parameters of each message
             new_shape += shape
-            new_rate += 1/scale
+            new_scale += inv(scale)
 
         end
 
         # Correct shape update
-        edge.shape = new_shape - (num_messages-1)
-        edge.rate = new_rate
+        edge.shape = new_shape - (num_messages - 1)
+        edge.scale = inv(new_scale)
 
         return Nothing
     end
@@ -72,7 +79,7 @@ end
 
 function belief(edge::EdgeGamma)
     "Outgoing message"
-    return Gamma(edge.shape, 1/edge.rate)
+    return Gamma(edge.shape, edge.scale)
 end
 
 function entropy(edge::EdgeGamma)
@@ -80,23 +87,27 @@ function entropy(edge::EdgeGamma)
 
     # Parameters
     a = edge.shape
-    b = edge.rate
+    θ = edge.scale
 
     # Entropy of a univariate Gamma
-    return a - log(b) + log(gamma(a)) + (1-a)*digamma(a)
+    return a + log(θ) + log(gamma(a)) + (1-a)*digamma(a)
 end
 
-function grad_entropy(edge:EdgeGamma)
+function grad_entropy(edge::EdgeGamma)
     "Gradient of entropy of Gamma evaluated for supplied parameters"
 
-    # Partial derivative with respect to shape
-    partial_shape = 1 + (1 - edge.shape)*polygamma(1, edge.shape)
+    # Parameters
+    a = edge.shape
+    θ = edge.scale
 
-    # Partial derivative with respect to rate
-    partial_rate = -1/edge.rate
+    # Partial derivative with respect to shape
+    partial_a = 1 + (1 + a)*polygamma(1, a)
+
+    # Partial derivative with respect to scale
+    partial_θ = 1/θ
 
     # Return tuple of partial derivatives
-    return (partial_shape, partial_rate)
+    return (partial_a, partial_θ)
 end
 
 function free_energy(edge::EdgeGamma, graph::MetaGraph)

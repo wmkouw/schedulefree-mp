@@ -1,6 +1,6 @@
 export EdgeDelta
 
-using Distributions: Normal, Uniform, logpdf
+using Distributions: Normal, logpdf
 
 mutable struct EdgeDelta
     """
@@ -36,7 +36,7 @@ function entropy(edge::EdgeDelta)
     return 0.0
 end
 
-function gradient_entropy(edge:EdgeDelta)
+function gradient_entropy(edge::EdgeDelta)
     "Gradient of entropy for observed variable is 0."
     return 0.0
 end
@@ -65,7 +65,7 @@ end
 
 function belief(edge::EdgeDelta)
     "Edge is distribution"
-    return edge.observation
+    return Delta(edge.observation)
 end
 
 function act(edge::EdgeDelta, belief, old_free_energy, graph::MetaGraph)

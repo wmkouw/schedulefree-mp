@@ -38,20 +38,20 @@ mutable struct LikelihoodGaussian
 
         # Check for set parameters vs recognition distributions
         if isa(edge_data, Float64)
-            beliefs["data"] = edge_data
+            beliefs["data"] = Delta(edge_data)
         else
             connected_edges["data"] = edge_data
             beliefs["data"] = Normal()
         end
         if isa(edge_mean, Float64)
-            beliefs["mean"] = edge_mean
+            beliefs["mean"] = Delta(edge_mean)
         else
             connected_edges["mean"] = edge_mean
             beliefs["mean"] = Normal()
         end
         if isa(edge_precision, Float64)
             if edge_precision > 0.0
-                beliefs["precision"] = edge_precision
+                beliefs["precision"] = Delta(edge_precision)
             else
                 error("Exception: precision should be positive.")
             end
@@ -62,7 +62,7 @@ mutable struct LikelihoodGaussian
 
         # Check for emission and controls
         if isa(edge_emission, Float64)
-            beliefs["emission"] = edge_emission
+            beliefs["emission"] = Delta(edge_emission)
         else
             connected_edges["emission"] = edge_emission
             beliefs["emission"] = Normal()
@@ -86,27 +86,15 @@ function energy(node::LikelihoodGaussian)
 
     # Moments of emission belief
     Eb = mean(node.beliefs["emission"])
-    if isa(node.beliefs["emission"], Float64)
-        Vb = 0.0
-    else
-        Vb = var(node.beliefs["emission"])
-    end
+    Vb = var(node.beliefs["emission"])
 
     # Moments of mean belief
     Em = mean(node.beliefs["mean"])
-    if isa(node.beliefs["mean"], Float64)
-        Vm = 0.0
-    else
-        Vm = var(node.beliefs["mean"])
-    end
+    Vm = var(node.beliefs["mean"])
 
     # Moments of data belief
     Ex = mean(node.beliefs["data"])
-    if isa(node.beliefs["data"], Float64)
-        Vx = 0.0
-    else
-        Vx = var(node.beliefs["data"])
-    end
+    Vx = var(node.beliefs["data"])
 
     # Moments of precision belief
     Eγ = mean(node.beliefs["precision"])
@@ -138,27 +126,15 @@ function message(node::LikelihoodGaussian, edge_id::String)
 
     # Moments of emission belief
     Eb = mean(node.beliefs["emission"])
-    if isa(node.beliefs["emission"], Float64)
-        Vb = 0.0
-    else
-        Vb = var(node.beliefs["emission"])
-    end
+    Vb = var(node.beliefs["emission"])
 
     # Moments of mean belief
     Em = mean(node.beliefs["mean"])
-    if isa(node.beliefs["mean"], Float64)
-        Vm = 0.0
-    else
-        Vm = var(node.beliefs["mean"])
-    end
+    Vm = var(node.beliefs["mean"])
 
     # Moments of data belief
     Ex = mean(node.beliefs["data"])
-    if isa(node.beliefs["data"], Float64)
-        Vx = 0.0
-    else
-        Vx = var(node.beliefs["data"])
-    end
+    Vx = var(node.beliefs["data"])
 
     # Moments of precision belief
     Eγ = mean(node.beliefs["precision"])
@@ -176,13 +152,13 @@ function message(node::LikelihoodGaussian, edge_id::String)
     elseif edge_name == "precision"
 
         # Supply sufficient statistics
-        rate = (inv(Vx) + inv(Vm) + (Ex - Em)^2)/2
-        message = Gamma(3/2, 1/rate)
+        rate = (Vx + Vm + (Ex - Em)^2)/2
+        message = Gamma(3/2, 1/shape)
 
     elseif edge_name == "emission"
 
         # Supply sufficient statistics
-        message = Normal(Ex*Em/(Vm + Em^2), Eγ*(Vm + Em^2))
+        message = Normal(Ex*Em/(Vm + Em^2), inv(Eγ*(Vm + Em^2)))
 
     else
         throw("Exception: edge id unknown.")

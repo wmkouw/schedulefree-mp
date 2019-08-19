@@ -44,11 +44,11 @@ function update(edge::EdgeGaussian)
     if num_messages == 1
 
         # Collect parameters from single message
-        mean, var = params(collect(values(edge.messages))[1])
+        message_mean, message_var = params(collect(values(edge.messages))[1])
 
         # Update parameters
-        edge.mean = mean
-        edge.precision = inv(var)
+        edge.mean = message_mean
+        edge.precision = inv(message_var)
 
     elseif num_messages >= 2
 
@@ -58,13 +58,14 @@ function update(edge::EdgeGaussian)
         for key in keys(edge.messages)
 
             # Extract parameters
-            mean, var = params(edge.messages[key])
+            message_mean, message_var = params(edge.messages[key])
+            message_precision = inv(message_var)
 
             # Sum over precisions
-            total_precision += inv(var)
+            total_precision += message_precision
 
             # Compute weighted means
-            weighted_mean += inv(var)*mean
+            weighted_mean += message_precision*message_mean
         end
 
         # Update variational parameters

@@ -15,7 +15,7 @@ mutable struct Delta
 
     This is not a proper distribution, but this structure allows for a general
     interface for observed variables and unobserved variables (i.e. it is
-    possible to extracts moments of a clamped variable.)
+    possible to call mean/var on a fixed variable).
     """
 
     # Attributes

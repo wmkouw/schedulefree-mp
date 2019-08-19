@@ -11,7 +11,6 @@ using LightGraphs, MetaGraphs
 using Plots
 gr()
 
-
 # Factor graph components
 include("../nodes/node_gamma.jl")
 include("../nodes/node_gaussian.jl")
@@ -36,20 +35,20 @@ T = 100
 TT = 20
 
 # Known transition and observation matrices
-transition_coefficient = 1.0
-emission_coefficient = 1.0
+gain = 1.0
+emission = 1.0
 
 # Noise parameters
-measurement_noise = 1.0
 process_noise = 1.0
+measurement_noise = 1.0
 
 # Clamped parameters
-x_0_params = [0.0, 1.0]
-h_t_params = [0.0001, 0.0001]
+x_0_params = [0.0, 0.1]
+h_t_params = [0.1, 10.0]
 
 # Generate data
-observed, hidden = gendata_LGDS(transition_coefficient,
-                                emission_coefficient,
+observed, hidden = gendata_LGDS(gain,
+                                emission,
                                 process_noise,
                                 measurement_noise,
                                 x_0_params[1],
@@ -153,10 +152,10 @@ for t = 1:T
       global g_t = TransitionGaussian("g_t", edge_mean="x_tmin", edge_data="x_t", edge_precision="γ_t")
 
       # Process noise edge
-      global γ_t = EdgeGamma("γ_t", shape=1.0, rate=0.1)
+      global γ_t = EdgeGamma("γ_t", shape=1.0, scale=1.0)
 
       # Process noise prior node
-      global h_t = NodeGamma("h_t", edge_data="γ_t", edge_shape=h_t_params[1], edge_rate=h_t_params[2])
+      global h_t = NodeGamma("h_t", edge_data="γ_t", edge_shape=h_t_params[1], edge_scale=h_t_params[2])
 
       # Current state
       global x_t = EdgeGaussian("x_t", mean=0.0, precision=1.0)
@@ -183,8 +182,8 @@ for t = 1:T
           # Write out estimated state parameters
           estimated_states[t, 1, tt] = x_t.mean
           estimated_states[t, 2, tt] = sqrt(1/x_t.precision)
-          estimated_noises[t, 1, tt] = γ_t.shape / γ_t.rate
-          estimated_noises[t, 2, tt] = γ_t.shape / γ_t.rate^2
+          estimated_noises[t, 1, tt] = γ_t.shape * γ_t.scale
+          estimated_noises[t, 2, tt] = sqrt(γ_t.shape * γ_t.scale^2)
       end
 end
 

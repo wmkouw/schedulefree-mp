@@ -46,14 +46,14 @@ mutable struct TransitionGaussian
             beliefs["data"] = Normal()
         end
         if isa(edge_mean, Float64)
-            beliefs["mean"] = edge_mean
+            beliefs["mean"] = Delta(edge_mean)
         else
             connected_edges["mean"] = edge_mean
             beliefs["mean"] = Normal()
         end
         if isa(edge_precision, Float64)
             if edge_precision > 0.0
-                beliefs["precision"] = edge_precision
+                beliefs["precision"] = Delta(edge_precision)
             else
                 error("Exception: precision should be positive.")
             end
@@ -64,13 +64,13 @@ mutable struct TransitionGaussian
 
         # Check for transition and controls
         if isa(edge_transition, Float64)
-            beliefs["transition"] = edge_transition
+            beliefs["transition"] = Delta(edge_transition)
         else
             connected_edges["transition"] = edge_transition
             beliefs["transition"] = Normal()
         end
         if isa(edge_control, Float64)
-            beliefs["control"] = edge_control
+            beliefs["control"] = Delta(edge_control)
         else
             connected_edges["control"] = edge_control
             beliefs["control"] = Normal()
@@ -94,35 +94,20 @@ function energy(node::TransitionGaussian)
 
     # Moments of transition belief
     Ea = mean(node.beliefs["transition"])
-    if isa(node.beliefs["transition"], Float64)
-        Va = 0.0
-    else
-        Va = var(node.beliefs["transition"])
-    end
+    Va = var(node.beliefs["transition"])
 
     # Moments of control belief
     Eu = mean(node.beliefs["control"])
-    if isa(node.beliefs["control"], Float64)
-        Vu = 0.0
-    else
-        Vu = var(node.beliefs["control"])
-    end
+    Vu = var(node.beliefs["control"])
+
 
     # Moments of mean belief
     Em = mean(node.beliefs["mean"])
-    if isa(node.beliefs["mean"], Float64)
-        Vm = 0.0
-    else
-        Vm = var(node.beliefs["mean"])
-    end
+    Vm = var(node.beliefs["mean"])
 
     # Moments of data belief
     Ex = mean(node.beliefs["data"])
-    if isa(node.beliefs["data"], Float64)
-        Vx = 0.0
-    else
-        Vx = var(node.beliefs["data"])
-    end
+    Vx = var(node.beliefs["data"])
 
     # Moments of precision belief
     Eγ = mean(node.beliefs["precision"])
@@ -155,35 +140,20 @@ function message(node::TransitionGaussian, edge_id::String)
 
     # Moments of transition belief
     Ea = mean(node.beliefs["transition"])
-    if isa(node.beliefs["transition"], Float64)
-        Va = 0.0
-    else
-        Va = var(node.beliefs["transition"])
-    end
+    Va = var(node.beliefs["transition"])
 
     # Moments of control belief
     Eu = mean(node.beliefs["control"])
-    if isa(node.beliefs["control"], Float64)
-        Vu = 0.0
-    else
-        Vu = var(node.beliefs["control"])
-    end
+    Vu = var(node.beliefs["control"])
+
 
     # Moments of mean belief
     Em = mean(node.beliefs["mean"])
-    if isa(node.beliefs["mean"], Float64)
-        Vm = 0.0
-    else
-        Vm = var(node.beliefs["mean"])
-    end
+    Vm = var(node.beliefs["mean"])
 
     # Moments of data belief
     Ex = mean(node.beliefs["data"])
-    if isa(node.beliefs["data"], Float64)
-        Vx = 0.0
-    else
-        Vx = var(node.beliefs["data"])
-    end
+    Vx = var(node.beliefs["data"])
 
     # Moments of precision belief
     Eγ = mean(node.beliefs["precision"])
@@ -201,8 +171,8 @@ function message(node::TransitionGaussian, edge_id::String)
     elseif edge_name == "precision"
 
         # Supply sufficient statistics
-        rate = (inv(Vx) + inv(Vm) + (Ex - Em)^2)/2
-        message = Gamma(3/2, 1/rate)
+        shape = (Vx + Vm + (Ex - Em)^2)/2
+        message = Gamma(3/2, 1/shape)
 
     elseif edge_name == "transition"
 

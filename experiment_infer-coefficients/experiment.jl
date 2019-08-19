@@ -35,21 +35,21 @@ T = 100
 TT = 20
 
 # Known transition and observation matrices
-transition_coefficient = 0.8
-emission_coefficient = 1.0
+gain = 0.8
+emission = 1.0
 
-# Noise parameters
+# Noise parameters (variance form)
 measurement_noise = 0.5
 process_noise = 0.5
 
-# Clamped parameters
-x_0_params = [0.0, 1.0]
-Γ_params = [0.05, 0.01]
-A_params = [0.8, 1.0]
+# Clamped parameters (mean-precision, shape-scale form)
+x_0_params = [0.0, 0.1]
+Γ_params = [0.1, 10.0]
+A_params = [0.8, 0.1]
 
 # Generate data
-observed, hidden = gendata_LGDS(transition_coefficient,
-                                emission_coefficient,
+observed, hidden = gendata_LGDS(gain,
+                                emission,
                                 process_noise,
                                 measurement_noise,
                                 x_0_params[1],
@@ -152,7 +152,7 @@ estimated_transition = zeros(T, 2, TT)
 # Set state prior x_0
 global x_t = EdgeGaussian("x_0"; mean=x_0_params[1], precision=x_0_params[2])
 global a_t = EdgeGaussian("a_0"; mean=0.0, precision=0.1)
-global γ_t = EdgeGamma("γ_0"; shape=0.01, rate=0.01)
+global γ_t = EdgeGamma("γ_0"; shape=0.01, scale=0.01)
 
 for t = 1:T
     # t=1
@@ -169,10 +169,10 @@ for t = 1:T
       global g_t = TransitionGaussian("g_t", edge_mean="x_tmin", edge_data="x_t", edge_precision="γ_t", edge_transition="a_t")
 
       # Process noise edge
-      global γ_t = EdgeGamma("γ_t", shape=γ_t.shape, rate=γ_t.rate)
+      global γ_t = EdgeGamma("γ_t", shape=γ_t.shape, scale=γ_t.scale)
 
       # Process noise prior node
-      global Γ = NodeGamma("Γ", edge_data="γ_t", edge_shape=Γ_params[1], edge_rate=Γ_params[2])
+      global Γ = NodeGamma("Γ", edge_data="γ_t", edge_shape=Γ_params[1], edge_scale=Γ_params[2])
 
       # Transition coefficient edge
       global a_t = EdgeGaussian("a_t", mean=a_t.mean, precision=a_t.precision)
@@ -207,8 +207,8 @@ for t = 1:T
           # Write out estimated state parameters
           estimated_states[t, 1, tt] = x_t.mean
           estimated_states[t, 2, tt] = sqrt(1/x_t.precision)
-          estimated_noises[t, 1, tt] = γ_t.shape / γ_t.rate
-          estimated_noises[t, 2, tt] = γ_t.shape / γ_t.rate^2
+          estimated_noises[t, 1, tt] = γ_t.shape / γ_t.scale
+          estimated_noises[t, 2, tt] = γ_t.shape / γ_t.scale^2
           estimated_transition[t, 1, tt] = a_t.mean
           estimated_transition[t, 2, tt] = sqrt(1/a_t.precision)
       end
@@ -248,7 +248,7 @@ title!("Parameter trajectory of q(x_t) for t="*string(t))
 savefig(pwd()*"/experiment_infer-coefficients/viz/state_parameter_trajectory_t" * string(t) * ".png")
 
 # Visualize final transition coefficient estimates over time
-plot(transition_coefficient*ones(T,1), color="black", label="transition")
+plot(gain*ones(T,1), color="black", label="transition")
 plot!(estimated_transition[:,1,end], color="blue", label="estimates")
 plot!(estimated_transition[:,1,end],
       ribbon=[estimated_transition[:,2,end], estimated_transition[:,2,end]],
