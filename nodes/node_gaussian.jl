@@ -70,6 +70,41 @@ function energy(node::NodeGaussian)
     Assumes Gaussian distributions for x,m and Gamma for γ.
     """
 
+        # Moments of mean belief
+        Em = mean(node.beliefs["mean"])
+        Vm = var(node.beliefs["mean"])
+
+        # Moments of data belief
+        Ex = mean(node.beliefs["data"])
+        Vx = var(node.beliefs["data"])
+
+        # Moments of precision belief
+        Eγ = mean(node.beliefs["precision"])
+
+        # Check whether precision is clamped
+        if isa(node.beliefs["precision"], Gamma)
+
+            # Extract parameters
+            shape, scale = params(node.beliefs["precision"])
+
+            # Expectation of the log of precision
+            Elogγ = digamma(shape) + log(scale)
+        else
+            # Expectation of the log of fixed precision
+            Elogγ = log(Eγ)
+        end
+
+        # -log-likelihood of Gaussian with expected parameters
+        return -1/2*log(2*pi) + 1/2*Elogγ - Eγ/2*(Vx + (Ex -Em)^2 + Vm)
+    end
+
+function grad_energy(node::NodeGaussian, edge_id::String)
+    """
+    Compute gradient of internal energy with respect to a particular edge.
+
+    Assumes Gaussian distributions for x,m and Gamma for γ.
+    """
+
     # Moments of mean belief
     Em = mean(node.beliefs["mean"])
     Vm = var(node.beliefs["mean"])
@@ -81,18 +116,38 @@ function energy(node::NodeGaussian)
     # Moments of precision belief
     Eγ = mean(node.beliefs["precision"])
 
-    # Check whether precision is clamped
-    if isa(node.beliefs["precision"], Gamma)
+    if edge_id == "data"
+
+        # Partial derivative with respect to mean of data belief
+        partial_mean = -Eγ*(Ex - Em)
+
+        # Partial derivative with respect to precision of data belief
+        partial_precision = -Eγ/2 # TODO check inversion
+
+        return (partial_mean, partial_precision)
+
+    elseif edge_id == "mean"
+
+        # Partial derivative with respect to mean of belief over mean
+        partial_mean = -Eγ*(Em - Ex)
+
+        # Partial derivative with respect to precision of belief over mean
+        partial_precision = -Eγ/2
+
+        return (partial_mean, partial_precision)
+
+    elseif edge_id == "precision"
 
         # Extract parameters
         shape, scale = params(node.beliefs["precision"])
 
-        # -log-likelihood of Gaussian with expected parameters
-        return -1/2*log(2*pi) + 1/2*(digamma(shape) + log(scale)) - Eγ/2*(Vx + (Ex -Em)^2 + Vm)
+        # Partial derivative with respect to shape of precision belief
+        partial_shape = 1/2*polygamma(1, shape) - 1/2*scale*(Vx + (Ex - Em)^2 + Vm)
 
-    else
-        # -log-likelihood of Gaussian with expected parameters
-        return -1/2*log(2*pi) + 1/2*log(Eγ) - Eγ/2*(Vx + (Ex -Em)^2 + Vm)
+        # Partial derivative with respect to shape of precision belief
+        partial_scale = 1/(2*scale) - 1/2*shape*(Vx + (Ex - Em)^2 + Vm)
+
+        return (partial_shape, partial_scale)
     end
 end
 
@@ -100,7 +155,7 @@ function message(node::NodeGaussian, edge_id::String)
     """
     Compute messages to each edge.
 
-    Assumes Gaussian distributions for x,m,a,u and Gamma for γ.
+    Assumes Gaussian distributions for x,m and Gamma for γ.
     """
 
     # Get edge name from edge id

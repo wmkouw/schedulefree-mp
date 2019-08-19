@@ -69,13 +69,10 @@ mutable struct NodeGamma
 end
 
 function energy(node::NodeGamma)
-    """
-    Compute internal energy of node
+    """Compute internal energy of node."""
 
-    For now, this function assumes that parameters a,θ are clamped to particular
-    values. If they are (non-Gamma) distributions, i.e. q(a)q(θ), then
-    E_q(a)[log(a)] =/= ψ(a) + log(θ) for instance.
-    """
+    #For now, this function assumes that parameters a,θ are clamped to particular values.
+    # If a,θ are non-gamma distributions, then E_q(a)[log(a)] =/= ψ(a) + log(θ) e.g.
     if ~isa(node.beliefs["shape"], Delta) and ~isa(node.beliefs["scale"], Delta)
         error("Energy functional not known for belief on gamma parameters.")
     end
@@ -85,8 +82,43 @@ function energy(node::NodeGamma)
     Eθ = mean(node.beliefs["scale"])
     Ex = mean(node.beliefs["data"])
 
+    # Parameters of data distribution
+    shape = node.beliefs["data"].shape
+    scale = node.beliefs["data"].scale
+
     # E_qx E_qa E_qθ -log Γ(x|a,θ)
-    return log(gamma(Ea)) + Ea*log(Eθ) - (Ea - 1)*(digamma(Ea) + log(Eθ)) + Ex/Eθ
+    return log(gamma(Ea)) + Ea*log(Eθ) - (Ea - 1)*(digamma(shape) + log(scale)) + Ex/Eθ
+end
+
+function grad_energy(node::NodeGamma, edge_id::String)
+    """Compute gradient of internal energy with respect to a particular edge."""
+
+    # For now, this function assumes that parameters a,θ are clamped to particular values.
+    # If a,θ are non-gamma distributions, then E_q(a)[log(a)] =/= ψ(a) + log(θ) e.g.
+    if ~isa(node.beliefs["shape"], Delta) and ~isa(node.beliefs["scale"], Delta)
+        error("Energy functional not known for belief on gamma parameters.")
+    end
+
+    # Expectations over beliefs
+    Ea = mean(node.beliefs["shape"])
+    Eθ = mean(node.beliefs["scale"])
+    Ex = mean(node.beliefs["data"])
+
+    # Partial derivative with respect to x
+    if edge_id == "data"
+
+        # Parameters of data distribution
+        shape = node.beliefs["data"].shape
+        scale = node.beliefs["data"].scale
+
+        # Partial derivative with respect to shape parameter of data belief
+        partial_shape = -(Ea - 1)*polygamma(1, shape) + scale / Eθ
+
+        # Partial derivative with respect to shape parameter of data belief
+        partial_scale = -(Ea - 1)/scale + shape/Eθ
+
+        return (partial_shape, partial_scale)
+    end
 end
 
 function message(node::NodeGamma, edge_id::String)

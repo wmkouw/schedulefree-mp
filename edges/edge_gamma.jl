@@ -101,13 +101,13 @@ function grad_entropy(edge::EdgeGamma)
     θ = edge.scale
 
     # Partial derivative with respect to shape
-    partial_a = 1 + (1 + a)*polygamma(1, a)
+    partial_shape = 1 + (1 + a)*polygamma(1, a)
 
     # Partial derivative with respect to scale
-    partial_θ = 1/θ
+    partial_scale = 1/θ
 
     # Return tuple of partial derivatives
-    return (partial_a, partial_θ)
+    return (partial_shape, partial_scale)
 end
 
 function free_energy(edge::EdgeGamma, graph::MetaGraph)
