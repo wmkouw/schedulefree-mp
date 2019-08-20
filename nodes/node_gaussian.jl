@@ -15,6 +15,7 @@ mutable struct NodeGaussian
     # Reaction parameters
     incoming::Queue{Tuple}
     threshold::Float64
+    silent::Bool
 
     # Additional properties
     verbose::Bool
@@ -24,6 +25,7 @@ mutable struct NodeGaussian
                           edge_mean=0.0,
                           edge_precision=1.0,
                           threshold=0.0,
+                          silent=false,
                           verbose=false)
 
         # Keep track of recognition distributions
@@ -58,7 +60,7 @@ mutable struct NodeGaussian
         incoming = Queue{Tuple}()
 
         # Create instance
-        self = new(id, beliefs, connected_edges, incoming, threshold, verbose)
+        self = new(id, beliefs, connected_edges, incoming, threshold, silent, verbose)
         return self
     end
 end
@@ -241,6 +243,12 @@ function react(node::NodeGaussian, graph::MetaGraph)
                     act(node, edge_out, graph)
                 end
             end
+
+            # Mark that node has fired
+            node.silent = false
+        else
+            # Mark that node has gone silent
+            node.silent = true
         end
     end
 

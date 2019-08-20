@@ -1,5 +1,6 @@
 export EdgeGaussian
 
+using LinearAlgebra: norm
 using Distributions: Normal, mean, std, params
 using DataStructures: Queue, enqueue!, dequeue!
 using LightGraphs, MetaGraphs

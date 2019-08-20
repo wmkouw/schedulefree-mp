@@ -16,6 +16,7 @@ mutable struct NodeGamma
     # Reaction parameters
     incoming::Queue{Tuple}
     threshold::Float64
+    silent::Bool
 
     # Additional properties
     verbose::Bool
@@ -25,6 +26,7 @@ mutable struct NodeGamma
                        edge_shape=1.0,
                        edge_scale=1.0,
                        threshold=0.0,
+                       silent=false,
                        verbose=false)
 
        # Keep track of recognition distributions
@@ -63,7 +65,7 @@ mutable struct NodeGamma
        incoming = Queue{Tuple}()
 
        # Create instance
-       self = new(id, beliefs, connected_edges, incoming, threshold, verbose)
+       self = new(id, beliefs, connected_edges, incoming, threshold, silent, verbose)
        return self
     end
 end
@@ -195,6 +197,11 @@ function react(node::NodeGamma, graph::MetaGraph)
                     act(node, edge_out, graph)
                 end
             end
+            # Mark that node has fired
+            node.silent = false
+        else
+            # Mark that node has gone silent
+            node.silent = true
         end
     end
 
