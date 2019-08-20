@@ -10,6 +10,7 @@ using DataStructures
 using LightGraphs
 using MetaGraphs
 using Plots
+gr()
 
 # Factor graph components
 include("../nodes/node_gaussian.jl")
@@ -111,6 +112,7 @@ Run inference procedure
 
 # Preallocation
 estimated_states = zeros(T, 2, TT)
+free_energy_gradients = zeros(T, TT)
 
 # Set state prior x_0
 global x_t = EdgeGaussian("x_0"; mean=mean_0, precision=precision_0)
@@ -151,6 +153,9 @@ for t = 1:T
           # Write out estimated state parameters
           estimated_states[t, 1, tt] = x_t.mean
           estimated_states[t, 2, tt] = sqrt(1/x_t.precision)
+
+          # Keep track of FE gradients
+          free_energy_gradients[t, tt] = x_t.grad_free_energy
     end
 end
 
@@ -182,3 +187,14 @@ plot!(estimated_states[t,1,:],
       fillcolor="blue",
       label="")
 savefig(pwd()*"/experiment_schedulefree-mp/viz/parameter_trajectory_t" * string(t) * ".png")
+
+# Visualize free energy gradients over time-series
+plot(free_energy_gradients[:,end], color="black", label="||dF||_t")
+xlabel!("time (t)")
+ylabel!("Norm of free energy gradient")
+savefig(pwd()*"/experiment_schedulefree-mp/viz/FE_gradients.png")
+
+# Visualize FE gradient for a specific time-step
+t = T
+plot(free_energy_gradients[t,:], color="blue", label="||dF||_t"*string(t))
+savefig(pwd()*"/experiment_schedulefree-mp/viz/FE-gradient_trajectory_t" * string(t) * ".png")

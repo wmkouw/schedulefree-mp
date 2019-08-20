@@ -134,6 +134,7 @@ Run inference procedure
 # Preallocation
 estimated_states = zeros(T, 2, TT)
 estimated_noises = zeros(T, 2, TT)
+free_energy_gradients = zeros(T, TT)
 
 # Set state prior x_0
 global x_t = EdgeGaussian("x_0"; mean=x_0_params[1], precision=x_0_params[2])
@@ -184,6 +185,9 @@ for t = 1:T
           estimated_states[t, 2, tt] = sqrt(1/x_t.precision)
           estimated_noises[t, 1, tt] = γ_t.shape * γ_t.scale
           estimated_noises[t, 2, tt] = sqrt(γ_t.shape * γ_t.scale^2)
+
+          # Keep track of FE gradients
+          free_energy_gradients[t, tt] = x_t.grad_free_energy
       end
 end
 
@@ -247,3 +251,14 @@ plot!(estimated_noises[t,1,1:end],
 xlabel!("iterations")
 title!("Parameter trajectory of q(γ_t) for t="*string(t))
 savefig(pwd()*"/experiment_infer-processnoise/viz/noise_parameter_trajectory_t" * string(t) * ".png")
+
+# Visualize free energy gradients over time-series
+plot(free_energy_gradients[:,end], color="black", label="||dF||_t")
+xlabel!("time (t)")
+ylabel!("Norm of free energy gradient")
+savefig(pwd()*"/experiment_infer-processnoise/viz/FE_gradients.png")
+
+# Visualize FE gradient for a specific time-step
+t = T
+plot(free_energy_gradients[t,:], color="blue", label="||dF||_t"*string(t))
+savefig(pwd()*"/experiment_infer-processnoise/viz/FE-gradient_trajectory_t" * string(t) * ".png")

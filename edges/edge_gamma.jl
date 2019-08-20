@@ -1,5 +1,6 @@
 export EdgeGamma
 
+using LinearAlgebra: norm
 using Distributions: Gamma, mean, params
 using DataStructures: Queue, enqueue!, dequeue!
 using SpecialFunctions: gamma, digamma, polygamma
@@ -16,11 +17,12 @@ mutable struct EdgeGamma
     shape::Float64
     scale::Float64
     free_energy::Float64
+    grad_free_energy::Float64
 
     # Message bookkeeping
     messages::Dict{String, Gamma}
 
-    function EdgeGamma(id; shape=1.0, scale=1.0, free_energy=1e12, block=false)
+    function EdgeGamma(id; shape=1.0, scale=1.0, free_energy=1e12, grad_free_energy=1e12, block=false)
 
         # Check valid parameters
         if shape < 0
@@ -34,7 +36,7 @@ mutable struct EdgeGamma
         messages = Dict{String, Gamma}()
 
         # Construct instance
-        self = new(id, block, shape, scale, free_energy, messages)
+        self = new(id, block, shape, scale, free_energy, grad_free_energy, messages)
         return self
     end
 end
@@ -137,6 +139,42 @@ function free_energy(edge::EdgeGamma, graph::MetaGraph)
     return U - H
 end
 
+function grad_free_energy(edge::EdgeGamma, graph::MetaGraph)
+    "Compute free energy of edge and connecting nodes"
+
+    # Extract connecting nodes
+    N = neighbors(graph, graph[edge.id, :id])
+    node_ids = [graph[n, :id] for n in N]
+
+    # Initialize node energies
+    free_energy_shape = 0.
+    free_energy_scale = 0.
+
+    # Update marginal at connected nodes
+    for node_id in node_ids
+
+        # Collect node variable via graph
+        node = eval(get_prop(graph, graph[node_id, :id], :object))
+
+        # Gradient of node energy evaluated at current belief parameters
+        energy_shape, energy_scale = grad_energy(node, edge.id)
+
+        # Add evaluated energy gradients
+        free_energy_shape += energy_shape
+        free_energy_scale += energy_scale
+    end
+
+    # Compute gradient of own entropy
+    entropy_shape, entropy_scale = grad_entropy(edge)
+
+    # Subtract evaluated entropy gradients
+    free_energy_shape -= entropy_shape
+    free_energy_scale -= entropy_scale
+
+    # Return norm of free energy gradient
+    return norm([free_energy_shape, free_energy_scale])
+end
+
 function act(edge::EdgeGamma,
              belief::Gamma,
              delta_free_energy::Float64,
@@ -172,17 +210,11 @@ function react(edge::EdgeGamma, graph::MetaGraph)
     # Update variational distribution
     update(edge)
 
-    # Compute free energy after update
-    new_free_energy = free_energy(edge, graph)
-
-    # Compute change in free energy after update
-    delta_free_energy = new_free_energy - edge.free_energy
+    # Compute gradient of free energy after update
+    edge.grad_free_energy = grad_free_energy(edge, graph)
 
     # Message from edge to nodes
-    act(edge, belief(edge), delta_free_energy, graph)
-
-    # Store new free energy
-    edge.free_energy = new_free_energy
+    act(edge, belief(edge), edge.grad_free_energy, graph)
 
     return Nothing
 end

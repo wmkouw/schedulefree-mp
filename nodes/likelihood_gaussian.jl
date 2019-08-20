@@ -105,12 +105,84 @@ function energy(node::LikelihoodGaussian)
         # Extract parameters
         shape, scale = params(node.beliefs["precision"])
 
-        # -log-likelihood of Gaussian with expected parameters
-        return -1/2*log(2*pi) + 1/2*(digamma(shape) + log(scale)) - Eγ/2*((Vx+Ex^2) -2*Ex*Em*Eb + (Vm+Em^2)*(Vb+Eb^2))
-
+        # Expectation of log γ
+        Elogγ = digamma(shape) + log(scale)
     else
-        # -log-likelihood of Gaussian with expected parameters
-        return -1/2*log(2*pi) + 1/2*log(Eγ) - Eγ/2*((Vx+Ex^2) -2*Ex*Em*Eb + (Vm+Em^2)*(Vb+Eb^2))
+        # Expectation of log of fixed γ
+        Elogγ = log(Eγ)
+    end
+
+    # Energy of Gaussian with expected parameters
+    return 1/2*log(2*pi) - 1/2*Elogγ + Eγ/2*(Vx+Ex^2 -2*Ex*Em*Eb + (Vm+Em^2)*(Vb+Eb^2))
+end
+
+function grad_energy(node::LikelihoodGaussian, edge_id::String)
+    """
+    Compute gradient of internal energy with respect to a particular edge.
+
+    Assumes Gaussian distributions for x,m and Gamma for γ.
+    """
+
+    # Get edge name from edge id
+    edge_name = key_from_value(node.connected_edges, edge_id)
+
+    # Moments of emission belief
+    Eb = mean(node.beliefs["emission"])
+    Vb = var(node.beliefs["emission"])
+
+    # Moments of mean belief
+    Em = mean(node.beliefs["mean"])
+    Vm = var(node.beliefs["mean"])
+
+    # Moments of data belief
+    Ex = mean(node.beliefs["data"])
+    Vx = var(node.beliefs["data"])
+
+    # Moments of precision belief
+    Eγ = mean(node.beliefs["precision"])
+
+    if edge_name == "data"
+
+        # Partial derivative with respect to mean of data belief
+        partial_mean = Eγ*(Ex - Em*Eb)
+
+        # Partial derivative with respect to variance of data belief
+        partial_variance = -Eγ/2
+
+        return (partial_mean, partial_variance)
+
+    elseif edge_name == "mean"
+
+        # Partial derivative with respect to mean of belief over mean
+        partial_mean = Eγ*(Em*(Eb^2 + Vb) - Ex*Eb)
+
+        # Partial derivative with respect to variance of belief over mean
+        partial_variance = Eγ/2*(Vb + Eb^2)
+
+        return (partial_mean, partial_variance)
+
+    elseif edge_name == "emission"
+
+        # Partial derivative with respect to mean of belief over emission coefficients
+        partial_mean = Eγ*(Eb*(Em^2 + Vm) - Ex*Em)
+
+        # Partial derivative with respect to variance of belief over emission coefficients
+        partial_variance = Eγ/2*(Vm + Em^2)
+
+        return (partial_mean, partial_variance)
+
+    elseif edge_name == "precision"
+
+        # Extract parameters
+        shape, scale = params(node.beliefs["precision"])
+
+        # Partial derivative with respect to shape of precision belief
+        partial_shape = -1/2*polygamma(1, shape) + 1/2*scale*(Vx+Ex^2 -2*Ex*Em*Eb + (Vm+Em^2)*(Vb+Eb^2))
+
+        # Partial derivative with respect to shape of precision belief
+        partial_scale = -1/(2*scale) + 1/2*shape*(Vx+Ex^2 -2*Ex*Em*Eb + (Vm+Em^2)*(Vb+Eb^2))
+
+        return (partial_shape, partial_scale)
     end
 end
 

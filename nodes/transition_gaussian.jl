@@ -100,6 +100,54 @@ function energy(node::TransitionGaussian)
     Eu = mean(node.beliefs["control"])
     Vu = var(node.beliefs["control"])
 
+    # Moments of mean belief
+    Em = mean(node.beliefs["mean"])
+    Vm = var(node.beliefs["mean"])
+
+    # Moments of data belief
+    Ex = mean(node.beliefs["data"])
+    Vx = var(node.beliefs["data"])
+
+    # Moments of precision belief
+    Eγ = mean(node.beliefs["precision"])
+
+    # Moments of precision belief
+    Eγ = mean(node.beliefs["precision"])
+
+    # Check whether precision is clamped
+    if isa(node.beliefs["precision"], Gamma)
+
+        # Extract parameters
+        shape, scale = params(node.beliefs["precision"])
+
+        # Expectation of log γ
+        Elogγ = digamma(shape) + log(scale)
+    else
+        # Expectation of log of fixed γ
+        Elogγ = log(Eγ)
+    end
+
+    # Energy of Gaussian with expected parameters
+    return 1/2*log(2*pi) - 1/2*Elogγ + Eγ/2*(Vx+Ex^2 -2*Ex*Em*Ea - 2*Ex*Eu + 2*Ea*Em*Eu + (Vm+Em^2)*(Va+Ea^2) + Vu+Eu^2)
+end
+
+function grad_energy(node::TransitionGaussian, edge_id::String)
+    """
+    Compute gradient of internal energy with respect to a particular edge.
+
+    Assumes Gaussian distributions for x,m,a and Gamma for γ.
+    """
+
+    # Get edge name from edge id
+    edge_name = key_from_value(node.connected_edges, edge_id)
+
+    # Moments of transition belief
+    Ea = mean(node.beliefs["transition"])
+    Va = var(node.beliefs["transition"])
+
+    # Moments of control belief
+    Eu = mean(node.beliefs["control"])
+    Vu = var(node.beliefs["control"])
 
     # Moments of mean belief
     Em = mean(node.beliefs["mean"])
@@ -112,20 +160,59 @@ function energy(node::TransitionGaussian)
     # Moments of precision belief
     Eγ = mean(node.beliefs["precision"])
 
-    # Check whether precision is clamped
-    if isa(node.beliefs["precision"], Gamma)
+    if edge_name == "data"
+
+        # Partial derivative with respect to mean of data belief
+        partial_mean = Eγ*(Ex - (Ea*Em + Eu))
+
+        # Partial derivative with respect to variance of data belief
+        partial_variance = Eγ/2
+
+        return (partial_mean, partial_variance)
+
+    elseif edge_name == "mean"
+
+        # Partial derivative with respect to mean of belief over mean
+        partial_mean = Eγ*(Em*(Ea^2 + Va) + Ea*(Eu - Ex))
+
+        # Partial derivative with respect to variance of belief over mean
+        partial_variance = Eγ/2*(Va + Ea^2)
+
+        return (partial_mean, partial_variance)
+
+    elseif edge_name == "transition"
+
+        # Partial derivative with respect to mean of belief over transition coefficients
+        partial_mean = Eγ*(Ea*(Em^2 + Vm) + Em*(Eu - Ex))
+
+        # Partial derivative with respect to variance of belief over transition coefficients
+        partial_variance = Eγ/2*(Vm + Em^2)
+
+        return (partial_mean, partial_variance)
+
+    elseif edge_name == "control"
+
+        # Partial derivative with respect to mean of belief over control
+        partial_mean = Eγ*(Ea*Em - Ex + Eu)
+
+        # Partial derivative with respect to variance of belief over control
+        partial_variance = Eγ/2
+
+        return (partial_mean, partial_variance)
+
+    elseif edge_name == "precision"
 
         # Extract parameters
         shape, scale = params(node.beliefs["precision"])
 
-        # -log-likelihood of Gaussian with expected parameters
-        return -1/2*log(2*pi) + 1/2*(digamma(shape) + log(scale)) - Eγ/2*((Vx+Ex^2) -2*Ex*Em*Ea + (Vm+Em^2)*(Va+Ea^2))
+        # Partial derivative with respect to shape of precision belief
+        partial_shape = -1/2*polygamma(1, shape) + 1/2*scale*(Vx+Ex^2 -2*Ex*Em*Ea - 2*Ex*Eu + 2*Ea*Em*Eu + (Vm+Em^2)*(Va+Ea^2) + Vu+Eu^2)
 
-    else
-        # -log-likelihood of Gaussian with expected parameters
-        return -1/2*log(2*pi) + 1/2*log(Eγ) - Eγ/2*((Vx+Ex^2) -2*Ex*Em*Ea + (Vm+Em^2)*(Va+Ea^2))
+        # Partial derivative with respect to shape of precision belief
+        partial_scale = -1/(2*scale) + 1/2*shape*(Vx+Ex^2 -2*Ex*Em*Ea - 2*Ex*Eu + 2*Ea*Em*Eu + (Vm+Em^2)*(Va+Ea^2) + Vu+Eu^2)
+
+        return (partial_shape, partial_scale)
     end
-    # TODO: incorporate control
 end
 
 function message(node::TransitionGaussian, edge_id::String)

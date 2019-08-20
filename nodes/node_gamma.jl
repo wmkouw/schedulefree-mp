@@ -74,7 +74,7 @@ function energy(node::NodeGamma)
     #For now, this function assumes that parameters a,θ are clamped to particular values.
     # If a,θ are non-gamma distributions, then E_q(a)[log(a)] =/= ψ(a) + log(θ) e.g.
     if ~isa(node.beliefs["shape"], Delta) and ~isa(node.beliefs["scale"], Delta)
-        error("Energy functional not known for belief on gamma parameters.")
+        error("Error: energy functional not known for belief on gamma parameters.")
     end
 
     # Expectations over beliefs
@@ -96,8 +96,11 @@ function grad_energy(node::NodeGamma, edge_id::String)
     # For now, this function assumes that parameters a,θ are clamped to particular values.
     # If a,θ are non-gamma distributions, then E_q(a)[log(a)] =/= ψ(a) + log(θ) e.g.
     if ~isa(node.beliefs["shape"], Delta) and ~isa(node.beliefs["scale"], Delta)
-        error("Energy functional not known for belief on gamma parameters.")
+        error("Error: energy functional not known for belief on gamma parameters.")
     end
+
+    # Get edge name from edge id
+    edge_name = key_from_value(node.connected_edges, edge_id)
 
     # Expectations over beliefs
     Ea = mean(node.beliefs["shape"])
@@ -105,11 +108,10 @@ function grad_energy(node::NodeGamma, edge_id::String)
     Ex = mean(node.beliefs["data"])
 
     # Partial derivative with respect to x
-    if edge_id == "data"
+    if edge_name == "data"
 
         # Parameters of data distribution
-        shape = node.beliefs["data"].shape
-        scale = node.beliefs["data"].scale
+        shape, scale = params(node.beliefs["data"])
 
         # Partial derivative with respect to shape parameter of data belief
         partial_shape = -(Ea - 1)*polygamma(1, shape) + scale / Eθ

@@ -95,7 +95,7 @@ function energy(node::NodeGaussian)
         end
 
         # -log-likelihood of Gaussian with expected parameters
-        return -1/2*log(2*pi) + 1/2*Elogγ - Eγ/2*(Vx + (Ex -Em)^2 + Vm)
+        return 1/2*log(2*pi) - 1/2*Elogγ + Eγ/2*(Vx + (Ex -Em)^2 + Vm)
     end
 
 function grad_energy(node::NodeGaussian, edge_id::String)
@@ -104,6 +104,9 @@ function grad_energy(node::NodeGaussian, edge_id::String)
 
     Assumes Gaussian distributions for x,m and Gamma for γ.
     """
+
+    # Get edge name from edge id
+    edge_name = key_from_value(node.connected_edges, edge_id)
 
     # Moments of mean belief
     Em = mean(node.beliefs["mean"])
@@ -116,36 +119,36 @@ function grad_energy(node::NodeGaussian, edge_id::String)
     # Moments of precision belief
     Eγ = mean(node.beliefs["precision"])
 
-    if edge_id == "data"
+    if edge_name == "data"
 
         # Partial derivative with respect to mean of data belief
-        partial_mean = -Eγ*(Ex - Em)
+        partial_mean = Eγ*(Ex - Em)
 
-        # Partial derivative with respect to precision of data belief
-        partial_precision = -Eγ/2 # TODO check inversion
+        # Partial derivative with respect to variance of data belief
+        partial_variance = Eγ/2
 
-        return (partial_mean, partial_precision)
+        return (partial_mean, partial_variance)
 
-    elseif edge_id == "mean"
+    elseif edge_name == "mean"
 
         # Partial derivative with respect to mean of belief over mean
-        partial_mean = -Eγ*(Em - Ex)
+        partial_mean = Eγ*(Em - Ex)
 
-        # Partial derivative with respect to precision of belief over mean
-        partial_precision = -Eγ/2
+        # Partial derivative with respect to variance of belief over mean
+        partial_variance = Eγ/2
 
         return (partial_mean, partial_precision)
 
-    elseif edge_id == "precision"
+    elseif edge_name == "precision"
 
         # Extract parameters
         shape, scale = params(node.beliefs["precision"])
 
         # Partial derivative with respect to shape of precision belief
-        partial_shape = 1/2*polygamma(1, shape) - 1/2*scale*(Vx + (Ex - Em)^2 + Vm)
+        partial_shape = -1/2*polygamma(1, shape) + 1/2*scale*(Vx + (Ex - Em)^2 + Vm)
 
         # Partial derivative with respect to shape of precision belief
-        partial_scale = 1/(2*scale) - 1/2*shape*(Vx + (Ex - Em)^2 + Vm)
+        partial_scale = -1/(2*scale) + 1/2*shape*(Vx + (Ex - Em)^2 + Vm)
 
         return (partial_shape, partial_scale)
     end
@@ -185,7 +188,7 @@ function message(node::NodeGaussian, edge_id::String)
     elseif edge_name == "precision"
 
         # Supply sufficient statistics
-        shape = (Vx + Vm + (Ex - Em)^2)/2
+        shape = (Vx + (Ex - Em)^2 + Vm)/2
         message = Gamma(3/2, 1/shape)
 
     else

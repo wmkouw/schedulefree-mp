@@ -15,11 +15,17 @@ mutable struct EdgeGaussian
     mean::Float64
     precision::Float64
     free_energy::Float64
+    grad_free_energy::Float64
 
     # Message bookkeeping
     messages::Dict{String, Normal}
 
-    function EdgeGaussian(id; mean=0.0, precision=1.0, free_energy=1e12, block=false)
+    function EdgeGaussian(id;
+                          mean=0.0,
+                          precision=1.0,
+                          free_energy=1e12,
+                          grad_free_energy=1e12,
+                          block=false)
 
         # Check valid precision
         if precision <= 0
@@ -30,7 +36,7 @@ mutable struct EdgeGaussian
         messages = Dict{String, Normal}()
 
         # Construct instance
-        self = new(id, block, mean, precision, free_energy, messages)
+        self = new(id, block, mean, precision, free_energy, grad_free_energy, messages)
         return self
     end
 end
@@ -83,20 +89,28 @@ end
 
 function entropy(edge::EdgeGaussian)
     "Entropy of Gaussian distribution"
-    return 1/2*log(2*π * ℯ / edge.precision)
+
+    # Variance
+    edge_variance = inv(edge.precision)
+
+    # Entropy
+    return 1/2*log(2*π * ℯ * edge_variance)
 end
 
-function gradient_entropy(edge::EdgeGaussian)
+function grad_entropy(edge::EdgeGaussian)
     "Gradient of entropy of Gaussian evaluated for supplied parameters"
+
+    # Variance
+    edge_variance = inv(edge.precision)
 
     # Partial derivative with respect to mean
     partial_mean = 0.0
 
-    # Partial derivative with respect to precision
-    partial_precision = -1/(2*edge.precision)
+    # Partial derivative with respect to variance
+    partial_variance = 1/(2*edge_variance)
 
     # Return tuple of partial derivatives
-    return (partial_mean, partial_precision)
+    return (partial_mean, partial_variance)
 end
 
 function free_energy(edge::EdgeGaussian, graph::MetaGraph)
@@ -124,6 +138,42 @@ function free_energy(edge::EdgeGaussian, graph::MetaGraph)
 
     # Return free energy
     return U - H
+end
+
+function grad_free_energy(edge::EdgeGaussian, graph::MetaGraph)
+    "Compute gradient of local free energy."
+
+    # Extract connecting nodes
+    N = neighbors(graph, graph[edge.id, :id])
+    node_ids = [graph[n, :id] for n in N]
+
+    # Initialize free energies partial derivatives
+    free_energy_mean = 0.
+    free_energy_variance = 0.
+
+    # Update marginal at connected nodes
+    for node_id in node_ids
+
+        # Collect node variable via graph
+        node = eval(get_prop(graph, graph[node_id, :id], :object))
+
+        # Gradient of node energy evaluated at current belief parameters
+        energy_mean, energy_variance = grad_energy(node, edge.id)
+
+        # Add evaluated energy gradients
+        free_energy_mean += energy_mean
+        free_energy_variance += energy_variance
+    end
+
+    # Compute gradient of own entropy
+    entropy_mean, entropy_variance = grad_entropy(edge)
+
+    # Subtract evaluated entropy gradients
+    free_energy_mean -= entropy_mean
+    free_energy_variance -= entropy_variance
+
+    # Return norm of free energy gradient
+    return norm([free_energy_mean, free_energy_variance])
 end
 
 function act(edge::EdgeGaussian,
@@ -162,16 +212,10 @@ function react(edge::EdgeGaussian, graph::MetaGraph)
     update(edge)
 
     # Compute free energy after update
-    new_free_energy = free_energy(edge, graph)
-
-    # Compute change in free energy after update
-    delta_free_energy = new_free_energy - edge.free_energy
+    edge.grad_free_energy = grad_free_energy(edge, graph)
 
     # Message from edge to nodes
-    act(edge, belief(edge), delta_free_energy, graph)
-
-    # Store new free energy
-    edge.free_energy = new_free_energy
+    act(edge, belief(edge), edge.grad_free_energy, graph)
 
     return Nothing
 end
