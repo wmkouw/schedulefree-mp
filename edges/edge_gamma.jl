@@ -11,6 +11,7 @@ mutable struct EdgeGamma
     """
     # Factor graph properties
     id::String
+    time::Int64
     block::Bool
 
     # Recognition distribution parameters
@@ -22,7 +23,13 @@ mutable struct EdgeGamma
     # Message bookkeeping
     messages::Dict{String, Gamma}
 
-    function EdgeGamma(id; shape=1.0, scale=1.0, free_energy=1e12, grad_free_energy=1e12, block=false)
+    function EdgeGamma(id::String;
+                       time=0,
+                       shape=1.0,
+                       scale=1.0,
+                       free_energy=1e12,
+                       grad_free_energy=1e12, 
+                       block=false)
 
         # Check valid parameters
         if shape < 0
@@ -36,7 +43,7 @@ mutable struct EdgeGamma
         messages = Dict{String, Gamma}()
 
         # Construct instance
-        self = new(id, block, shape, scale, free_energy, grad_free_energy, messages)
+        self = new(id, time, block, shape, scale, free_energy, grad_free_energy, messages)
         return self
     end
 end

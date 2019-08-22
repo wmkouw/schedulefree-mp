@@ -10,6 +10,7 @@ mutable struct EdgeGaussian
 
     # Factor graph properties
     id::String
+    time::Int64
     block::Bool
 
     # Recognition distribution parameters
@@ -21,7 +22,8 @@ mutable struct EdgeGaussian
     # Message bookkeeping
     messages::Dict{String, Normal}
 
-    function EdgeGaussian(id;
+    function EdgeGaussian(id::String;
+                          time=0,
                           mean=0.0,
                           precision=1.0,
                           free_energy=1e12,
@@ -37,7 +39,7 @@ mutable struct EdgeGaussian
         messages = Dict{String, Normal}()
 
         # Construct instance
-        self = new(id, block, mean, precision, free_energy, grad_free_energy, messages)
+        self = new(id, time, block, mean, precision, free_energy, grad_free_energy, messages)
         return self
     end
 end

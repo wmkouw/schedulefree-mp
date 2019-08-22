@@ -29,7 +29,7 @@ Experiment parameters
 """
 
 # Spiking threshold
-threshold = 1e-6
+threshold = 1e-2
 
 # Signal time horizon
 T = 100
@@ -180,6 +180,7 @@ estimated_state_noise = zeros(T, 2)
 estimated_gains = zeros(T, 2)
 estimated_gain_noise = zeros(T, 2)
 free_energy_gradients = zeros(T)
+num_ticks = zeros(T)
 
 # Set state prior x0
 global x_t = EdgeGaussian("x0", mean=x0_params[1], precision=x0_params[2])

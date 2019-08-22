@@ -15,23 +15,27 @@ mutable struct TransitionGaussian
 
     # Identifiers of edges/nodes in factor graph
     id::String
+    time::Int64
     beliefs::Dict{String, Any}
     connected_edges::Dict{String, String}
 
     # Reaction parameters
     incoming::Queue{Tuple}
+    heuristics::Dict{String,Any}
     threshold::Float64
     silent::Bool
 
     # Additional properties
     verbose::Bool
 
-    function TransitionGaussian(id;
+    function TransitionGaussian(id::String;
+                                time=0,
                                 edge_data=0.0,
                                 edge_mean=0.0,
                                 edge_precision=1.0,
                                 edge_transition=1.0,
                                 edge_control=0.0,
+                                heuristics=Dict{String,Any}("backwards_in_time" => false),
                                 threshold=0.0,
                                 silent=false,
                                 verbose=false)
@@ -82,7 +86,7 @@ mutable struct TransitionGaussian
         incoming = Queue{Tuple}()
 
         # Create instance
-        self = new(id, beliefs, connected_edges, incoming, threshold, silent, verbose)
+        self = new(id, time, beliefs, connected_edges, incoming, heuristics, threshold, silent, verbose)
         return self
     end
 end
@@ -291,10 +295,14 @@ function act(node::TransitionGaussian, edge_id::String, graph::MetaGraph)
     # Check if edge is blocked
     if edge.block == false
 
-        # Pass message to edge
-        edge.messages[node.id] = outgoing_message
+        # Check heuristics for blocking
+        if node.heuristics["backwards_in_time"] | (edge.time >= node.time)
 
+            # Pass message to edge
+            edge.messages[node.id] = outgoing_message
+        end
     end
+
     return Nothing
 end
 

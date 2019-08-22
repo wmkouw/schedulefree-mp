@@ -14,25 +14,25 @@ mutable struct LikelihoodGaussian
 
     # Identifiers of edges/nodes in factor graph
     id::String
+    time::Int64
     beliefs::Dict{String, Any}
     connected_edges::Dict{String, String}
 
     # Reaction parameters
     incoming::Queue{Tuple}
+    heuristics::Dict{String,Any}
     threshold::Float64
     silent::Bool
 
-    # Additional properties
-    verbose::Bool
-
-    function LikelihoodGaussian(id;
+    function LikelihoodGaussian(id::String;
+                                time=0,
                                 edge_mean=0.0,
                                 edge_data=0.0,
                                 edge_precision=1.0,
                                 edge_emission=1.0,
+                                heuristics=Dict("backwards_in_time" => false),
                                 threshold=0.0,
-                                silent=false,
-                                verbose=false)
+                                silent=false)
 
         # Keep track of recognition distributions
         beliefs = Dict{String, Any}()
@@ -74,7 +74,7 @@ mutable struct LikelihoodGaussian
         incoming = Queue{Tuple}()
 
         # Create instance
-        self = new(id, beliefs, connected_edges, incoming, threshold, silent, verbose)
+        self = new(id, time, beliefs, connected_edges, incoming, heuristics, threshold, silent)
         return self
     end
 end
@@ -253,9 +253,12 @@ function act(node::LikelihoodGaussian, edge_id::String, graph::MetaGraph)
     # Check if edge is blocked
     if edge.block == false
 
-        # Pass message to edge
-        edge.messages[node.id] = outgoing_message
+        # Check heuristics for blocking
+        if node.heuristics["backwards_in_time"] | (edge.time >= node.time)
 
+            # Pass message to edge
+            edge.messages[node.id] = outgoing_message
+        end
     end
 
     return Nothing

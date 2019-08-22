@@ -10,7 +10,6 @@ using DataStructures
 using LightGraphs
 using MetaGraphs
 using Plots
-gr()
 
 # Factor graph components
 include("../nodes/node_gaussian.jl")

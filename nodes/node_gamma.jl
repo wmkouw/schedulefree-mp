@@ -10,11 +10,13 @@ mutable struct NodeGamma
 
     # Identifiers of edges/nodes in factor graph
     id::String
+    time::Int64
     beliefs::Dict{String, Any}
     connected_edges::Dict{String, String}
 
     # Reaction parameters
     incoming::Queue{Tuple}
+    heuristics::Dict{String,Any}
     threshold::Float64
     silent::Bool
 
@@ -22,9 +24,11 @@ mutable struct NodeGamma
     verbose::Bool
 
     function NodeGamma(id::String;
+                       time=0,
                        edge_data=1.0,
                        edge_shape=1.0,
                        edge_scale=1.0,
+                       heuristics=Dict("backwards_in_time" => false),
                        threshold=0.0,
                        silent=false,
                        verbose=false)
@@ -65,7 +69,7 @@ mutable struct NodeGamma
        incoming = Queue{Tuple}()
 
        # Create instance
-       self = new(id, beliefs, connected_edges, incoming, threshold, silent, verbose)
+       self = new(id, time, beliefs, connected_edges, incoming, heuristics, threshold, silent, verbose)
        return self
     end
 end
@@ -167,8 +171,16 @@ function act(node::NodeGamma, edge_id::String, graph::MetaGraph)
     # Find edge based on edge id
     edge = eval(graph[graph[edge_id, :id], :object])
 
-    # Put message in edge's message box
-    edge.messages[node.id] = outgoing_message
+    # Check if edge is blocked
+    if edge.block == false
+
+        # Check heuristics for blocking
+        if node.heuristics["backwards_in_time"] | (edge.time >= node.time)
+
+            # Pass message to edge
+            edge.messages[node.id] = outgoing_message
+        end
+    end
 
     return Nothing
 end
