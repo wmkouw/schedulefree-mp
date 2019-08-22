@@ -10,7 +10,7 @@ using DataStructures
 using LightGraphs
 using MetaGraphs
 using Plots
-gr()
+using JLD
 
 # Factor graph components
 include("../nodes/node_gaussian.jl")
@@ -49,13 +49,20 @@ mean_0 = 0.0
 precision_0 = 1.0
 
 # Generate data
-observed, hidden = gendata_LGDS(gain,
-                                emission,
-                                process_noise,
-                                measurement_noise,
-                                mean_0,
-                                precision_0,
-                                time_horizon=T)
+generate_new_data = false
+if generate_new_data
+      observed, hidden = gendata_LGDS(gain,
+                                    emission,
+                                    process_noise,
+                                    measurement_noise,
+                                    mean_0,
+                                    precision_0,
+                                    time_horizon=T)
+      save("/tmp/LGDS_signal.jld", "observed", observed, "hidden", hidden)
+else
+      observed = load("/tmp/LGDS_signal.jld", "observed")
+      hidden = load("/tmp/LGDS_signal.jld", "hidden")
+end
 
 """
 Model/graph specification
@@ -209,18 +216,11 @@ plot!(estimated_states[:,end,1],
       fillcolor="blue",
       label="")
 scatter!(observed, color="black", label="observations")
-savefig(pwd()*"/experiment_unrolled-schedulefree/viz/state_estimates.png")
-
-# Visualize state estimate trajectories
-plot(estimated_states[1,:,1], color="blue", label="estimates")
-plot!(estimated_states[1,:,1],
-      ribbon=[estimated_states[1,:,2], estimated_states[1,:,2]],
-      linewidth=2,
-      color="blue",
-      fillalpha=0.2,
-      fillcolor="blue",
-      label="")
-savefig(pwd()*"/experiment_unrolled-schedulefree/viz/trajectory_x1.png")
+if heuristics["backwards_in_time"]
+      savefig(pwd()*"/experiment_unrolled-schedulefree/viz/state_estimates_smoothing.png")
+else
+      savefig(pwd()*"/experiment_unrolled-schedulefree/viz/state_estimates_filtering.png")
+end
 
 # Visualize state estimate trajectories
 for t = 1:T
@@ -232,5 +232,9 @@ for t = 1:T
             fillalpha=0.2,
             fillcolor="blue",
             label="")
-      savefig(pwd()*"/experiment_unrolled-schedulefree/viz/trajectory_x"*string(t)*".png")
+      if heuristics["backwards_in_time"]
+            savefig(pwd()*"/experiment_unrolled-schedulefree/viz/trajectory_x"*string(t)*"_smoothing.png")
+      else
+            savefig(pwd()*"/experiment_unrolled-schedulefree/viz/trajectory_x"*string(t)*"_filtering.png")
+      end
 end
