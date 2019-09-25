@@ -79,7 +79,7 @@ y_t = observation node
 """
 
 # Start graph
-graph = MetaGraph(PathDiGraph(5))
+graph = MetaGraph(path_digraph(5))
 
 # Previous state
 x_tmin = EdgeGaussian("x_tmin")
