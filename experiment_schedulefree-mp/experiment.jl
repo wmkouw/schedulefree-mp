@@ -79,7 +79,7 @@ y_t = observation node
 """
 
 # Start graph
-graph = MetaGraph(PathDiGraph(5))
+graph = MetaGraph(path_digraph(5))
 
 # Previous state
 x_tmin = EdgeGaussian("x_tmin")
@@ -173,7 +173,7 @@ plot!(estimated_states[:,1,end],
       fillcolor="blue",
       label="")
 scatter!(observed, color="black", label="observations")
-savefig(pwd()*"/experiment_schedulefree-mp/viz/state_estimates.png")
+savefig(joinpath(@__DIR__, "viz/state_estimates.png"))
 
 # Visualize parameter trajectory
 t = T
@@ -185,15 +185,15 @@ plot!(estimated_states[t,1,:],
       fillalpha=0.2,
       fillcolor="blue",
       label="")
-savefig(pwd()*"/experiment_schedulefree-mp/viz/parameter_trajectory_t" * string(t) * ".png")
+savefig(joinpath(@__DIR__, "viz/parameter_trajectory_t" * string(t) * ".png"))
 
 # Visualize free energy gradients over time-series
 plot(free_energy_gradients[:,end], color="black", label="||dF||_t")
 xlabel!("time (t)")
 ylabel!("Norm of free energy gradient")
-savefig(pwd()*"/experiment_schedulefree-mp/viz/FE_gradients.png")
+savefig(joinpath(@__DIR__, "viz/FE_gradients.png"))
 
 # Visualize FE gradient for a specific time-step
 t = T
 plot(free_energy_gradients[t,:], color="blue", label="||dF||_t"*string(t))
-savefig(pwd()*"/experiment_schedulefree-mp/viz/FE-gradient_trajectory_t" * string(t) * ".png")
+savefig(joinpath(@__DIR__, "viz/FE-gradient_trajectory_t" * string(t) * ".png"))
