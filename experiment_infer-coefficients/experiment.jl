@@ -9,7 +9,7 @@ using Distributions
 using DataStructures
 using LightGraphs, MetaGraphs
 using Plots
-gr()
+pyplot()
 
 # Factor graph components
 include("../nodes/node_gamma.jl")
@@ -29,10 +29,10 @@ Experiment parameters
 """
 
 # Signal time horizon
-T = 100
+T = 50
 
 # Reaction-time clock
-TT = 20
+TT = 10
 
 # Known transition and observation matrices
 gain = 0.8
@@ -44,8 +44,8 @@ process_noise = 0.5
 
 # Clamped parameters (mean-precision, shape-scale form)
 x_0_params = [0.0, 0.1]
-Γ_params = [0.1, 10.0]
-A_params = [0.8, 0.1]
+Γ_params = [1.0, 1.0]
+A_params = [0.5, 1.0]
 
 # Generate data
 observed, hidden = gendata_LGDS(gain,
@@ -152,15 +152,14 @@ free_energy_gradients = zeros(T, TT)
 
 # Set state prior x_0
 global x_t = EdgeGaussian("x_0"; mean=x_0_params[1], precision=x_0_params[2])
-global a_t = EdgeGaussian("a_0"; mean=0.0, precision=0.1)
-global γ_t = EdgeGamma("γ_0"; shape=0.01, scale=0.01)
+global a_t = EdgeGaussian("a_0"; mean=A_params[1], precision=A_params[2])
+global γ_t = EdgeGamma("γ_0"; shape=Γ_params[1], scale=Γ_params[2])
 
 for t = 1:T
-    # t=1
 
       # Report progress
       if mod(t, T/10) == 1
-          println("At iteration "*string(t)*"/"*string(T))
+        println("At iteration "*string(t)*"/"*string(T))
       end
 
       # Previous state
@@ -169,17 +168,17 @@ for t = 1:T
       # State transition node
       global g_t = TransitionGaussian("g_t", edge_mean="x_tmin", edge_data="x_t", edge_precision="γ_t", edge_transition="a_t")
 
+      # Process noise prior node
+      global Γ = NodeGamma("Γ", edge_data="γ_t", edge_shape=γ_t.shape, edge_scale=γ_t.scale)
+
       # Process noise edge
       global γ_t = EdgeGamma("γ_t", shape=γ_t.shape, scale=γ_t.scale)
 
-      # Process noise prior node
-      global Γ = NodeGamma("Γ", edge_data="γ_t", edge_shape=Γ_params[1], edge_scale=Γ_params[2])
+      # Transition coefficient prior node
+      global A = NodeGaussian("A", edge_data="a_t", edge_mean=a_t.mean, edge_precision=a_t.precision)
 
       # Transition coefficient edge
       global a_t = EdgeGaussian("a_t", mean=a_t.mean, precision=a_t.precision)
-
-      # Transition coefficient prior node
-      global A = NodeGaussian("A", edge_data="a_t", edge_mean=A_params[1], edge_precision=A_params[2])
 
       # Current state
       global x_t = EdgeGaussian("x_t", mean=x_tmin.mean, precision=x_tmin.precision)
@@ -196,25 +195,25 @@ for t = 1:T
       # Start clock for reactions
       for tt = 1:TT
 
-          react(g_t, graph)
-          react(γ_t, graph)
-          react(Γ, graph)
-          react(a_t, graph)
-          react(A, graph)
-          react(x_t, graph)
-          react(f_t, graph)
-          react(y_t, graph)
+        react(g_t, graph)
+        react(γ_t, graph)
+        react(Γ, graph)
+        react(a_t, graph)
+        react(A, graph)
+        react(x_t, graph)
+        react(f_t, graph)
+        react(y_t, graph)
 
-          # Write out estimated state parameters
-          estimated_states[t, 1, tt] = x_t.mean
-          estimated_states[t, 2, tt] = sqrt(1/x_t.precision)
-          estimated_noises[t, 1, tt] = γ_t.shape / γ_t.scale
-          estimated_noises[t, 2, tt] = γ_t.shape / γ_t.scale^2
-          estimated_transition[t, 1, tt] = a_t.mean
-          estimated_transition[t, 2, tt] = sqrt(1/a_t.precision)
+        # Write out estimated state parameters
+        estimated_states[t, 1, tt] = x_t.mean
+        estimated_states[t, 2, tt] = sqrt(1/x_t.precision)
+        estimated_noises[t, 1, tt] = γ_t.shape * γ_t.scale
+        estimated_noises[t, 2, tt] = γ_t.shape * γ_t.scale^2
+        estimated_transition[t, 1, tt] = a_t.mean
+        estimated_transition[t, 2, tt] = sqrt(1/a_t.precision)
 
-          # Keep track of FE gradients
-          free_energy_gradients[t, tt] = x_t.grad_free_energy
+        # Keep track of FE gradients
+        free_energy_gradients[t, tt] = x_t.grad_free_energy
       end
 end
 
@@ -278,6 +277,34 @@ plot!(estimated_transition[t,1,1:end],
 xlabel!("iterations")
 title!("Parameter trajectory of q(a_t) for t="*string(t))
 savefig(pwd()*"/experiment_infer-coefficients/viz/transition_parameter_trajectory_t" * string(t) * ".png")
+
+# Visualize final noise estimates over time
+plot(process_noise*ones(T,1), color="black", label="true process noise", linewidth=2)
+plot!(estimated_noises[:,1,end], color="blue", label="estimates")
+plot!(estimated_noises[:,1,end],
+      ribbon=[estimated_noises[:,2,end], estimated_noises[:,2,end]],
+      linewidth=2,
+      color="blue",
+      fillalpha=0.2,
+      fillcolor="blue",
+      label="")
+xlabel!("time (t)")
+title!("Noise estimates, q(γ_t)")
+savefig(pwd()*"/experiment_infer-coefficients/viz/noise_estimates.png")
+
+# Visualize noise belief parameter trajectory
+t = T
+plot(estimated_noises[t,1,1:end], color="blue", label="q(γ_"*string(t)*")")
+plot!(estimated_noises[t,1,1:end],
+      ribbon=[estimated_noises[t,2,1:end], estimated_noises[t,2,1:end]],
+      linewidth=2,
+      color="blue",
+      fillalpha=0.2,
+      fillcolor="blue",
+      label="")
+xlabel!("iterations")
+title!("Parameter trajectory of q(γ_t) for t="*string(t))
+savefig(pwd()*"/experiment_infer-coefficients/viz/noise_parameter_trajectory_t" * string(t) * ".png")
 
 # Visualize free energy gradients over time-series
 plot(free_energy_gradients[:,end], color="black", label="||dF||_t")

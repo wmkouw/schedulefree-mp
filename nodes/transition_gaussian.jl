@@ -264,8 +264,9 @@ function message(node::TransitionGaussian, edge_id::String)
     elseif edge_name == "precision"
 
         # Supply sufficient statistics
-        shape = (Vx + Vm + (Ex - Em)^2)/2
-        message = Gamma(3/2, 1/shape)
+        scale = (Vx + Vm + (Ex - Em)^2)/2
+        # message = Gamma(3/2, 1/scale)
+        message = Gamma(3/2, scale)
 
     elseif edge_name == "transition"
 

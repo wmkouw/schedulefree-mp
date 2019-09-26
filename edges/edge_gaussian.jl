@@ -12,6 +12,7 @@ mutable struct EdgeGaussian
     id::String
     time::Int64
     block::Bool
+    silent::Bool
 
     # Recognition distribution parameters
     mean::Float64
@@ -28,7 +29,8 @@ mutable struct EdgeGaussian
                           precision=1.0,
                           free_energy=1e12,
                           grad_free_energy=1e12,
-                          block=false)
+                          block=false,
+                          silent=false)
 
         # Check valid precision
         if precision <= 0
@@ -39,7 +41,7 @@ mutable struct EdgeGaussian
         messages = Dict{String, Normal}()
 
         # Construct instance
-        self = new(id, time, block, mean, precision, free_energy, grad_free_energy, messages)
+        self = new(id, time, block, silent, mean, precision, free_energy, grad_free_energy, messages)
         return self
     end
 end
@@ -214,11 +216,15 @@ function react(edge::EdgeGaussian, graph::MetaGraph)
     # Update variational distribution
     update(edge)
 
-    # Compute free energy after update
-    edge.grad_free_energy = grad_free_energy(edge, graph)
+    # Check whether edge should remain silent
+    if !edge.silent
 
-    # Message from edge to nodes
-    act(edge, belief(edge), edge.grad_free_energy, graph)
+        # Compute gradient of free energy after update
+        edge.grad_free_energy = grad_free_energy(edge, graph)
+
+        # Message from edge to nodes
+        act(edge, belief(edge), edge.grad_free_energy, graph)
+    end
 
     return Nothing
 end

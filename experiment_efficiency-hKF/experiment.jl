@@ -9,7 +9,7 @@ using Distributions
 using DataStructures
 using LightGraphs, MetaGraphs
 using Plots
-gr()
+pyplot()
 
 # Factor graph components
 include("../nodes/node_gamma.jl")
@@ -29,7 +29,7 @@ Experiment parameters
 """
 
 # Spiking threshold
-threshold = 1e-2
+threshold = 1e-6
 
 # Signal time horizon
 T = 100

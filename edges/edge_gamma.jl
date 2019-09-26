@@ -4,6 +4,7 @@ using LinearAlgebra: norm
 using Distributions: Gamma, mean, params
 using DataStructures: Queue, enqueue!, dequeue!
 using SpecialFunctions: gamma, digamma, polygamma
+include("../util.jl")
 
 mutable struct EdgeGamma
     """
@@ -13,6 +14,7 @@ mutable struct EdgeGamma
     id::String
     time::Int64
     block::Bool
+    silent::Bool
 
     # Recognition distribution parameters
     shape::Float64
@@ -28,8 +30,9 @@ mutable struct EdgeGamma
                        shape=1.0,
                        scale=1.0,
                        free_energy=1e12,
-                       grad_free_energy=1e12, 
-                       block=false)
+                       grad_free_energy=1e12,
+                       block=false,
+                       silent=false)
 
         # Check valid parameters
         if shape < 0
@@ -43,7 +46,7 @@ mutable struct EdgeGamma
         messages = Dict{String, Gamma}()
 
         # Construct instance
-        self = new(id, time, block, shape, scale, free_energy, grad_free_energy, messages)
+        self = new(id, time, block, silent, shape, scale, free_energy, grad_free_energy, messages)
         return self
     end
 end
@@ -51,39 +54,20 @@ end
 function update(edge::EdgeGamma)
     "Update recognition distribution as the product of messages"
 
-    # Number of messages
-    num_messages = length(edge.messages)
+    # Initialize message
+    belief = Gamma(1., Inf)
 
-    if num_messages == 0
+    # Loop over all incoming messages
+    for key in keys(edge.messages)
 
-        return Nothing
-
-    elseif num_messages == 1
-
-        # Extract parameters
-        edge.shape, edge.scale = params(collect(values(edge.messages))[1])
-
-    elseif num_messages >= 2
-
-        new_shape = 0
-        new_scale = 0
-        for key in keys(edge.messages)
-
-            # Extract parameters
-            shape, scale = params(edge.messages[key])
-
-            # Sum shape shape and scale parameters of each message
-            new_shape += shape
-            new_scale += inv(scale)
-
-        end
-
-        # Correct shape update
-        edge.shape = new_shape - (num_messages - 1)
-        edge.scale = inv(new_scale)
-
-        return Nothing
+        # Multiply the incoming beliefs
+        belief = belief * edge.messages[key]
     end
+
+    # Store parameters
+    edge.shape, edge.scale = params(belief)
+
+    return Nothing
 end
 
 function belief(edge::EdgeGamma)
@@ -217,11 +201,15 @@ function react(edge::EdgeGamma, graph::MetaGraph)
     # Update variational distribution
     update(edge)
 
-    # Compute gradient of free energy after update
-    edge.grad_free_energy = grad_free_energy(edge, graph)
+    # Check whether edge should remain silent
+    if !edge.silent
 
-    # Message from edge to nodes
-    act(edge, belief(edge), edge.grad_free_energy, graph)
+        # Compute gradient of free energy after update
+        edge.grad_free_energy = grad_free_energy(edge, graph)
+
+        # Message from edge to nodes
+        act(edge, belief(edge), edge.grad_free_energy, graph)
+    end
 
     return Nothing
 end

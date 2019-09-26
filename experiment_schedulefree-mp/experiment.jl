@@ -4,12 +4,14 @@
 # Wouter Kouw, BIASlab
 # 12-08-2019
 
+using Random
 using Revise
 using Distributions
 using DataStructures
 using LightGraphs
 using MetaGraphs
 using Plots
+pyplot()
 
 # Factor graph components
 include("../nodes/node_gaussian.jl")
@@ -27,10 +29,10 @@ Experiment parameters
 """
 
 # Signal time horizon
-T = 100
+T = 50
 
 # Reaction-time clock
-TT = 20
+TT = 10
 
 # Known transition and observation matrices
 gain = 0.8
@@ -45,6 +47,7 @@ mean_0 = 0.0
 precision_0 = 1.0
 
 # Generate data
+Random.seed!(254)
 observed, hidden = gendata_LGDS(gain,
                                 emission,
                                 process_noise,
@@ -57,7 +60,7 @@ observed, hidden = gendata_LGDS(gain,
 Model/graph specification
 
 This assumes the following type of models
-p(y_{1:T}, x_{0:T} | u_{1:T}) = p(x_0) Π_t p(y_t, x_t | x_{t-1})
+p(y_{1:T}, x_{0:T}) = p(x_0) Π_t p(y_t | x_t) p(x_t | x_{t-1})
 
 In other words, Markov chains of time-slices of a state-space models.
 Below, we specify the following model through the time-slice subgraph
@@ -72,33 +75,28 @@ Below, we specify the following model through the time-slice subgraph
                      y_t
 
 x_t-1 = previous state edge
-g_t = state transition edge
+g_t = state transition node
 x_t = current state edge
 f_t = likelihood node
 y_t = observation node
 """
 
 # Start graph
-graph = MetaGraph(PathDiGraph(5))
+graph = MetaGraph(PathGraph(5))
 
 # Previous state
-x_tmin = EdgeGaussian("x_tmin")
 set_props!(graph, 1, Dict{Symbol,Any}(:object => :x_tmin, :id => "x_tmin"))
 
 # State transition node
-g_t = TransitionGaussian("g_t")
 set_props!(graph, 2, Dict{Symbol,Any}(:object => :g_t, :id => "g_t"))
 
 # Current state
-x_t = EdgeGaussian("x_t")
 set_props!(graph, 3, Dict{Symbol,Any}(:object => :x_t, :id => "x_t"))
 
 # Observation likelihood node
-f_t = LikelihoodGaussian("f_t")
 set_props!(graph, 4, Dict{Symbol,Any}(:object => :f_t, :id => "f_t"))
 
 # Observation
-y_t = EdgeDelta("y_t")
 set_props!(graph, 5, Dict{Symbol,Any}(:object => :y_t, :id => "y_t"))
 
 # Ensure vertices can be recalled from given id
@@ -127,27 +125,22 @@ for t = 1:T
       global x_tmin = EdgeGaussian("x_tmin", mean=x_t.mean, precision=x_t.precision)
 
       # State transition node
-      global g_t = TransitionGaussian("g_t", edge_mean="x_tmin", edge_data="x_t", edge_precision=inv(process_noise))
+      global g_t = TransitionGaussian("g_t", edge_mean="x_tmin", edge_data="x_t", edge_precision=inv(process_noise), edge_transition=gain)
 
       # Current state
       global x_t = EdgeGaussian("x_t", mean=0.0, precision=1.0)
 
       # Observation likelihood node
-      global f_t = LikelihoodGaussian("f_t", edge_mean="x_t", edge_data="y_t", edge_precision=inv(measurement_noise))
+      global f_t = LikelihoodGaussian("f_t", edge_mean="x_t", edge_data="y_t", edge_precision=inv(measurement_noise), edge_emission=emission)
 
       # Observation edge
       global y_t = EdgeDelta("y_t", observation=observed[t])
 
       # Start message routine
-      act(x_tmin, belief(x_tmin), 1e12, graph)
+      act(x_tmin, belief(x_tmin), 1., graph)
 
       # Start clock for reactions
       for tt = 1:TT
-
-          react(g_t, graph)
-          react(x_t, graph)
-          react(f_t, graph)
-          react(y_t, graph)
 
           # Write out estimated state parameters
           estimated_states[t, 1, tt] = x_t.mean
@@ -155,6 +148,11 @@ for t = 1:T
 
           # Keep track of FE gradients
           free_energy_gradients[t, tt] = x_t.grad_free_energy
+
+          react(g_t, graph)
+          react(x_t, graph)
+          react(f_t, graph)
+          react(y_t, graph)
     end
 end
 
@@ -188,12 +186,14 @@ plot!(estimated_states[t,1,:],
 savefig(pwd()*"/experiment_schedulefree-mp/viz/parameter_trajectory_t" * string(t) * ".png")
 
 # Visualize free energy gradients over time-series
-plot(free_energy_gradients[:,end], color="black", label="||dF||_t")
+plot(free_energy_gradients[2:end,end].+1e-15, color="black", label="||dF||_t", yscale=:log10)
 xlabel!("time (t)")
 ylabel!("Norm of free energy gradient")
 savefig(pwd()*"/experiment_schedulefree-mp/viz/FE_gradients.png")
 
 # Visualize FE gradient for a specific time-step
 t = T
-plot(free_energy_gradients[t,:], color="blue", label="||dF||_t"*string(t))
+plot(free_energy_gradients[t,:], color="blue", label="||dF||_t"*string(t), yscale=:log10)
+xlabel!("iterations")
+ylabel!("Norm of free energy gradient")
 savefig(pwd()*"/experiment_schedulefree-mp/viz/FE-gradient_trajectory_t" * string(t) * ".png")

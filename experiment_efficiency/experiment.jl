@@ -10,7 +10,8 @@ using DataStructures
 using LightGraphs
 using MetaGraphs
 using Plots
-gr()
+using Random
+pyplot()
 
 # Factor graph components
 include("../nodes/node_gaussian.jl")
@@ -34,7 +35,7 @@ T = 100
 TT = 20
 
 # Spiking threshold
-threshold = 1e-6
+threshold = 1e-12
 
 # Known transition and observation matrices
 gain = 0.8
@@ -49,6 +50,7 @@ mean_0 = 0.0
 precision_0 = 1.0
 
 # Generate data
+Random.seed!(254)
 observed, hidden = gendata_LGDS(gain,
                                 emission,
                                 process_noise,
@@ -151,12 +153,9 @@ for t = 1:T
     while ~g_t.silent & ~f_t.silent
 
         react(g_t, graph)
-        # println(g_t.silent)
         react(x_t, graph)
         react(f_t, graph)
-        println(f_t.silent)
         react(y_t, graph)
-        println(f_t.silent)
 
         # Keep track of internal clock
         tt += 1

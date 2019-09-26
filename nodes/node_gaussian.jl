@@ -60,7 +60,7 @@ mutable struct NodeGaussian
         incoming = Queue{Tuple}()
 
         # Create instance
-        self = new(id, time, beliefs, connected_edges, incoming, heuristics, threshold, silent, verbose)
+        self = new(id, time, beliefs, connected_edges, incoming, heuristics, threshold, silent)
         return self
     end
 end
