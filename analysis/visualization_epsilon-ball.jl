@@ -20,8 +20,8 @@ epsilon = 6.
 τ_b = 3.0
 
 # Generate a grid for parameters of belief q(x_j)
-x = collect(range(-2, 2, step=0.1))
-y = collect(range(0.05, 2.0, step=0.05))
+x = collect(range(-4, 4, step=0.1))
+y = collect(range(0.05, 3.0, step=0.05))
 N = length(x)
 M = length(y)
 
@@ -43,10 +43,10 @@ for i = 1:N
 end
 
 # Plot grid
-surf(x, y, norm_partials')
-surf(x, y, threshold_plane')
-xlabel("μ_j")
-ylabel("σ2_j")
-zlabel("norm of gradient")
-zlim([4,20])
-show()
+# surf(x, y, norm_partials')
+contour(x, y, norm_partials', cmap="RdYlGn_r")
+contour(x, y, norm_partials', [epsilon], colors="blue", linewidths=4)
+xlabel("μⱼ", size=18)
+ylabel("σⱼ²", size=18)
+title("Set of variational parameters\n such that F[q(xⱼ | μⱼ, σⱼ²)] is below threshold")
+savefig(joinpath(@__DIR__, "viz/set_var-params_below-epsilon.png"))
