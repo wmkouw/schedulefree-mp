@@ -190,8 +190,9 @@ function message(node::NodeGaussian, edge_id::String)
     elseif edge_name == "precision"
 
         # Supply sufficient statistics
-        shape = (Vx + (Ex - Em)^2 + Vm)/2
-        message = Gamma(3/2, 1/shape)
+        inv_shape = (Vx + (Ex - Em)^2 + Vm)/2
+
+        message = Gamma(3/2, inv(inv_shape))
 
     else
         throw("Exception: edge id unknown.")

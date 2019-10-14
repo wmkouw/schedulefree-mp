@@ -226,8 +226,9 @@ function message(node::LikelihoodGaussian, edge_id::String)
     elseif edge_name == "precision"
 
         # Supply sufficient statistics
-        rate = (Vx + Vm + (Ex - Em)^2)/2
-        message = Gamma(3/2, 1/shape)
+        inv_scale = (Vx + Ex^2 - 2*Ex*Eb*Em + (Em^2 + Vm)*(Eb^2 + Vb))/2
+
+        message = Gamma(3/2., inv(inv_scale))
 
     elseif edge_name == "emission"
 
