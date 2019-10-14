@@ -7,8 +7,9 @@ Wouter Kouw
 
 export Delta
 
-import Statistics: mean, var
 import Base:*
+import Statistics: mean, var
+import LightGraphs: edges
 
 mutable struct Delta
     """
@@ -61,7 +62,7 @@ function *(px::Gamma{Float64}, qx::Gamma{Float64})
 
     # Add shapes
     shape = shape_p + shape_q
-    
+
     # Add scales
     scale = inv(scale_p) + inv(scale_q)
 
@@ -72,4 +73,22 @@ end
 function key_from_value(d::Dict{String,String}, k::String)
     "Given a value, find its key in a paired string dictionary."
     return collect(keys(d))[findfirst(collect(values(d)) .== k)]
+end
+
+function edges(g::LightGraphs.SimpleGraphs.AbstractSimpleGraph, node_id)
+    "Get edges connected to given node"
+
+    # Preallocate edges subset
+    edges_ = Vector{LightGraphs.SimpleGraphs.AbstractSimpleEdge}()
+
+    # Iterate through edges in graph
+    for edge in edges(G)
+
+        # Check whether edge is connected to target node
+        if edge.src == node_id
+
+            push!(edges_, edge)
+        end
+    end
+    return edges_
 end
