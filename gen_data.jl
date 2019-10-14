@@ -19,7 +19,7 @@ function gendata_RW(process_noise,
     # Initialize state
     x[1, :] = randn(d)./sqrt(precision_state0) .+ mean_state0
 
-    for t = 1:T
+    for t = 1:time_horizon
 
         # Evolve state
         x[t+1, :] = randn(d).*sqrt(process_noise) + x[t, :]
@@ -44,8 +44,8 @@ function gendata_LGDS(transition_matrix,
     d = size(transition_matrix, 1)
 
     # Preallocate
-    y = zeros(T, d)
-    x = zeros(T+1, d)
+    y = zeros(time_horizon, d)
+    x = zeros(time_horizon+1, d)
 
     # Initialize state
     x[1, :] = randn(d)./sqrt(precision_state0) .+ mean_state0
@@ -75,8 +75,8 @@ function gendata_LGDSBO(transition_matrix,
     d = size(transition_matrix, 1)
 
     # Preallocate
-    y = zeros(T, d)
-    x = zeros(T+1, d)
+    y = zeros(time_horizon, d)
+    x = zeros(time_horizon+1, d)
 
     # Initialize state
     x[1, :] = randn(d)./sqrt(precision_state0) .+ mean_state0
