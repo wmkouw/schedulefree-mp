@@ -4,6 +4,7 @@ using LinearAlgebra: norm
 using Distributions: Normal, mean, std, params
 using DataStructures: Queue, enqueue!, dequeue!
 using LightGraphs, MetaGraphs
+include("../util.jl")
 
 mutable struct EdgeGaussian
     """Edge with a Gaussian recognition distribution"""
@@ -49,42 +50,24 @@ end
 function update(edge::EdgeGaussian)
     "Update recognition distribution as the product of messages"
 
-    # Number of messages
-    num_messages = length(edge.messages)
+    if !edge.block
 
-    if num_messages == 1
+        # Initialize message
+        belief = Normal(0., Inf)
 
-        # Collect parameters from single message
-        message_mean, message_var = params(collect(values(edge.messages))[1])
-
-        # Update parameters
-        edge.mean = message_mean
-        edge.precision = inv(message_var)
-
-    elseif num_messages >= 2
-
-        # Loop over stored messages
-        total_precision = 0
-        weighted_mean = 0
+        # Loop over all incoming messages
         for key in keys(edge.messages)
 
-            # Extract parameters
-            message_mean, message_var = params(edge.messages[key])
-            message_precision = inv(message_var)
-
-            # Sum over precisions
-            total_precision += message_precision
-
-            # Compute weighted means
-            weighted_mean += message_precision*message_mean
+            # Multiply the incoming beliefs
+            belief = belief * edge.messages[key]
         end
 
-        # Update variational parameters
-        edge.precision = total_precision
-        edge.mean = inv(total_precision)*weighted_mean
+        # Store parameters
+        edge.mean, variance = params(belief)
+        edge.precision = inv(variance)
 
+        return Nothing
     end
-    return Nothing
 end
 
 function belief(edge::EdgeGaussian)
@@ -218,6 +201,9 @@ function react(edge::EdgeGaussian, graph::MetaGraph)
 
     # Check whether edge should remain silent
     if !edge.silent
+
+        # Compute free energy after update
+        edge.free_energy = free_energy(edge, graph)
 
         # Compute gradient of free energy after update
         edge.grad_free_energy = grad_free_energy(edge, graph)

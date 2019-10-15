@@ -47,7 +47,7 @@ mean_0 = 0.0
 precision_0 = 1.0
 
 # Generate data
-Random.seed!(254)
+Random.seed!(256)
 observed, hidden = gendata_LGDS(gain,
                                 emission,
                                 process_noise,
@@ -64,15 +64,14 @@ p(y_{1:T}, x_{0:T}) = p(x_0) Π_t p(y_t | x_t) p(x_t | x_{t-1})
 
 In other words, Markov chains of time-slices of a state-space models.
 Below, we specify the following model through the time-slice subgraph
-
-    x_t-1    _       x_t
-... --∘---->|_|----->|=|-----> ...
-            g_t       |
-                      |
-                     |_| f_t
-                      |
-                      ∘
-                     y_t
+     _____        ___       ___
+... (x_t-1)----->[g_t]---->(x_t)      ...
+                             |
+                            _|_
+                           [f_t]
+                             |
+                             ⊡
+                            y_t
 
 x_t-1 = previous state edge
 g_t = state transition node
@@ -82,22 +81,22 @@ y_t = observation node
 """
 
 # Start graph
-graph = MetaGraph(path_digraph(5))
+graph = MetaGraph(PathGraph(5))
 
 # Previous state
-set_props!(graph, 1, Dict{Symbol,Any}(:object => :x_tmin, :id => "x_tmin"))
+set_props!(graph, 1, Dict{Symbol,Any}(:object => :x_tmin, :id => "x_tmin", :type => "variable"))
 
 # State transition node
-set_props!(graph, 2, Dict{Symbol,Any}(:object => :g_t, :id => "g_t"))
+set_props!(graph, 2, Dict{Symbol,Any}(:object => :g_t, :id => "g_t", :type => "factor"))
 
 # Current state
-set_props!(graph, 3, Dict{Symbol,Any}(:object => :x_t, :id => "x_t"))
+set_props!(graph, 3, Dict{Symbol,Any}(:object => :x_t, :id => "x_t", :type => "variable"))
 
 # Observation likelihood node
-set_props!(graph, 4, Dict{Symbol,Any}(:object => :f_t, :id => "f_t"))
+set_props!(graph, 4, Dict{Symbol,Any}(:object => :f_t, :id => "f_t", :type => "factor"))
 
 # Observation
-set_props!(graph, 5, Dict{Symbol,Any}(:object => :y_t, :id => "y_t"))
+set_props!(graph, 5, Dict{Symbol,Any}(:object => :y_t, :id => "y_t", :type => "variable"))
 
 # Ensure vertices can be recalled from given id
 set_indexing_prop!(graph, :id)
@@ -109,6 +108,7 @@ Run inference procedure
 
 # Preallocation
 estimated_states = zeros(T, 2, TT)
+free_energies = zeros(T, TT)
 free_energy_gradients = zeros(T, TT)
 
 # Set state prior x_0
@@ -148,6 +148,7 @@ for t = 1:T
 
           # Keep track of FE gradients
           free_energy_gradients[t, tt] = x_t.grad_free_energy
+          free_energies[t, tt] = x_t.free_energy
 
           react(g_t, graph)
           react(x_t, graph)
@@ -175,7 +176,7 @@ savefig(joinpath(@__DIR__, "viz/state_estimates.png"))
 
 # Visualize parameter trajectory
 t = T
-plot(estimated_states[t,1,:], color="blue", label="q(x_"*string(t)*")")
+plot(estimated_states[t,1,:], color="blue", label="q(x_t="*string(t)*")")
 plot!(estimated_states[t,1,:],
       ribbon=[estimated_states[t,2,:], estimated_states[t,2,:]],
       linewidth=2,
@@ -185,6 +186,17 @@ plot!(estimated_states[t,1,:],
       label="")
 savefig(joinpath(@__DIR__, "viz/parameter_trajectory_t" * string(t) * ".png"))
 
+# Visualize free energies over time-series
+plot(free_energies[2:end,end].+1e-15, color="black", label="F[q(x_t)]", yscale=:log10)
+xlabel!("time (t)")
+ylabel!("Free energies over states")
+savefig(joinpath(@__DIR__, "viz/FE_states.png"))
+
+# Visualize FE gradient for a specific time-step
+t = T
+plot(free_energies[t,:], color="blue", label="F[q(x_t="*string(t)*")]", yscale=:log10)
+savefig(joinpath(@__DIR__, "viz/FE_trajectory_t" * string(t) * ".png"))
+
 # Visualize free energy gradients over time-series
 plot(free_energy_gradients[2:end,end].+1e-15, color="black", label="||dF||_t", yscale=:log10)
 xlabel!("time (t)")
@@ -193,5 +205,5 @@ savefig(joinpath(@__DIR__, "viz/FE_gradients.png"))
 
 # Visualize FE gradient for a specific time-step
 t = T
-plot(free_energy_gradients[t,:], color="blue", label="||dF||_t"*string(t))
+plot(free_energy_gradients[t,:], color="blue", label="||dF||_t="*string(t), yscale=:log10)
 savefig(joinpath(@__DIR__, "viz/FE-gradient_trajectory_t" * string(t) * ".png"))

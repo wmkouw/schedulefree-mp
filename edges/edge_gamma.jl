@@ -54,20 +54,23 @@ end
 function update(edge::EdgeGamma)
     "Update recognition distribution as the product of messages"
 
-    # Initialize message
-    belief = Gamma(1., Inf)
+    if !edge.block
 
-    # Loop over all incoming messages
-    for key in keys(edge.messages)
+        # Initialize message
+        belief = Gamma(1., Inf)
 
-        # Multiply the incoming beliefs
-        belief = belief * edge.messages[key]
+        # Loop over all incoming messages
+        for key in keys(edge.messages)
+
+            # Multiply the incoming beliefs
+            belief = belief * edge.messages[key]
+        end
+
+        # Store parameters
+        edge.shape, edge.scale = params(belief)
+
+        return Nothing
     end
-
-    # Store parameters
-    edge.shape, edge.scale = params(belief)
-
-    return Nothing
 end
 
 function belief(edge::EdgeGamma)

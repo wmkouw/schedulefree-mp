@@ -35,6 +35,9 @@ mutable struct NodeEquality
             connected_edges[edge] = edge
         end
 
+        # Initialize beliefs for all edges
+        beliefs = Dict{String, Any}()
+
         # Initialize queue for incoming messages
         incoming = Queue{Tuple}()
 

@@ -40,14 +40,14 @@ function *(px::Normal{Float64}, qx::Normal{Float64})
     "Multiplication of two normal distributions of the same variable."
 
     # Extract parameters
-    mu_p, si_p = params(px)
-    mu_q, si_q = params(qx)
+    mu_p, si2_p = params(px)
+    mu_q, si2_q = params(qx)
 
     # Add precisions
-    W = inv(si_p) + inv(si_q)
+    W = inv(si2_p) + inv(si2_q)
 
     # Add precision-weighted means
-    Wm = inv(si_p)*mu_p + inv(si_q)*mu_q
+    Wm = inv(si2_p)*mu_p + inv(si2_q)*mu_q
 
     # Return normal distribution in mean-variance parameterization
     return Normal(inv(W)*Wm, inv(W))
