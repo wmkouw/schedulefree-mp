@@ -97,10 +97,10 @@ function act(node::NodeEquality, edge_id::String, graph::MetaGraph)
     outgoing_message = message(node, edge_id)
 
     # Extract edge from graph
-    edge = eval(graph[graph[edge_id, :id], :object])
+    edge = eval(Symbol(edge_id))
 
     # Check if edge is blocked
-    if edge.block == false
+    if !edge.block
 
         # Pass message to edge
         edge.messages[node.id] = outgoing_message

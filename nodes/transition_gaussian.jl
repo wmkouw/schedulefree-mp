@@ -290,11 +290,11 @@ function act(node::TransitionGaussian, edge_id::String, graph::MetaGraph)
     # Compute message for a particular edge
     outgoing_message = message(node, edge_id)
 
-    # Extract edge from graph
-    edge = eval(graph[graph[edge_id, :id], :object])
+    # Call edge from string id
+    edge = eval(Symbol(edge_id))
 
     # Check if edge is blocked
-    if edge.block == false
+    if !edge.block
 
         # Check heuristics for blocking
         if node.heuristics["backwards_in_time"] | (edge.time >= node.time)

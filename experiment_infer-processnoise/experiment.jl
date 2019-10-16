@@ -95,31 +95,31 @@ y_t = observation node
 graph = MetaGraph(SimpleGraph(9))
 
 # Edge variable: previous state
-set_props!(graph, 1, Dict{Symbol,Any}(:object => :x_tmin, :id => "x_tmin", :type => "variable"))
+set_props!(graph, 1, Dict{Symbol,Any}(:id => "x_tmin", :type => "variable"))
 
 # Factor node: state transition
-set_props!(graph, 2, Dict{Symbol,Any}(:object => :g_t, :id => "g_t", :type => "factor"))
+set_props!(graph, 2, Dict{Symbol,Any}(:id => "g_t", :type => "factor"))
 
 # Edge variable: current process noise
-set_props!(graph, 3, Dict{Symbol,Any}(:object => :γ_x, :id => "γ_x", :type => "variable"))
+set_props!(graph, 3, Dict{Symbol,Any}(:id => "γ_x", :type => "variable"))
 
 # Edge variable: previous process noise
-set_props!(graph, 4, Dict{Symbol,Any}(:object => :γ_xp, :id => "γ_xp", :type => "variable"))
+set_props!(graph, 4, Dict{Symbol,Any}(:id => "γ_xp", :type => "variable"))
 
 # Edge variable: previous process noise
-set_props!(graph, 5, Dict{Symbol,Any}(:object => :γ_xpp, :id => "γ_xpp", :type => "variable"))
+set_props!(graph, 5, Dict{Symbol,Any}(:id => "γ_xpp", :type => "variable"))
 
 # Factor node: process noise equality
-set_props!(graph, 6, Dict{Symbol,Any}(:object => :e_γ, :id => "e_γ", :type => "factor"))
+set_props!(graph, 6, Dict{Symbol,Any}(:id => "e_γ", :type => "factor"))
 
 # Edge variable: current state
-set_props!(graph, 7, Dict{Symbol,Any}(:object => :x_t, :id => "x_t", :type => "variable"))
+set_props!(graph, 7, Dict{Symbol,Any}(:id => "x_t", :type => "variable"))
 
 # Factor node: likelihood
-set_props!(graph, 8, Dict{Symbol,Any}(:object => :f_t, :id => "f_t", :type => "factor"))
+set_props!(graph, 8, Dict{Symbol,Any}(:id => "f_t", :type => "factor"))
 
 # Edge variable: observation
-set_props!(graph, 9, Dict{Symbol,Any}(:object => :y_t, :id => "y_t", :type => "variable"))
+set_props!(graph, 9, Dict{Symbol,Any}(:id => "y_t", :type => "variable"))
 
 # Add edges between factor nodes and variables
 add_edge!(graph, 1, 2) # x_t-1 -- g_t
@@ -133,7 +133,6 @@ add_edge!(graph, 8, 9) # f_t -- y_t
 
 # Ensure vertices can be recalled from given id
 set_indexing_prop!(graph, :id)
-set_indexing_prop!(graph, :object)
 
 """
 Run inference procedure

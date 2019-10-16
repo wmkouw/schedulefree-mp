@@ -52,7 +52,7 @@ function free_energy(edge::EdgeDelta, graph::MetaGraph)
     node_id = neighbors(graph, graph[edge.id, :id])[1]
 
     # Collect node variable via graph
-    node = eval(get_prop(graph, node_id, :object))
+    node = eval(Symbol(get_prop(graph, node_id, :id)))
 
     # Add to total energy
     return energy(node) - entropy(edge)
@@ -76,7 +76,7 @@ function act(edge::EdgeDelta, belief, old_free_energy, graph::MetaGraph)
     node_id = neighbors(graph, graph[edge.id, :id])[1]
 
     # Call node from id
-    node = eval(get_prop(graph, graph[graph[node_id, :id], :id], :object))
+    node = eval(Symbol(graph[node_id, :id]))
 
     # Get edge name from edge id
     edge_name = key_from_value(node.connected_edges, edge.id)

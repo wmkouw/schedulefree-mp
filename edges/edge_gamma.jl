@@ -109,18 +109,17 @@ end
 function free_energy(edge::EdgeGamma, graph::MetaGraph)
     "Compute free energy of edge and connecting nodes"
 
-    # Extract connecting nodes
-    N = neighbors(graph, graph[edge.id, :id])
-    node_ids = [graph[n, :id] for n in N]
-
     # Initialize node energies
     U = 0
+    
+    # Extract connecting nodes
+    neighbours = neighbors(graph, graph[edge.id, :id])
 
     # Update marginal at connected nodes
-    for node_id in node_ids
+    for neighbour in neighbours
 
         # Collect node variable via graph
-        node = eval(get_prop(graph, graph[node_id, :id], :object))
+        node = eval(Symbol(graph[neighbour, :id]))
 
         # Add to total energy
         U += energy(node)
@@ -137,18 +136,17 @@ function grad_free_energy(edge::EdgeGamma, graph::MetaGraph)
     "Compute free energy of edge and connecting nodes"
 
     # Extract connecting nodes
-    N = neighbors(graph, graph[edge.id, :id])
-    node_ids = [graph[n, :id] for n in N]
+    neighbours = neighbors(graph, graph[edge.id, :id])
 
     # Initialize node energies
     free_energy_shape = 0.
     free_energy_scale = 0.
 
     # Update marginal at connected nodes
-    for node_id in node_ids
+    for neighbour in neighbours
 
         # Collect node variable via graph
-        node = eval(get_prop(graph, graph[node_id, :id], :object))
+        node = eval(Symbol(graph[neighbour, :id]))
 
         # Gradient of node energy evaluated at current belief parameters
         energy_shape, energy_scale = grad_energy(node, edge.id)
@@ -176,14 +174,13 @@ function act(edge::EdgeGamma,
     "Pass belief to connected nodes."
 
     # Extract connecting nodes
-    N = neighbors(graph, graph[edge.id, :id])
-    node_ids = [graph[n, :id] for n in N]
+    neighbours = neighbors(graph, graph[edge.id, :id])
 
     # Update marginal at connected nodes
-    for node_id in node_ids
+    for neighbour in neighbours
 
         # Collect node variable via graph
-        node = eval(get_prop(graph, graph[node_id, :id], :object))
+        node = eval(Symbol(graph[neighbour, :id]))
 
         # Get edge name from edge id
         edge_name = key_from_value(node.connected_edges, edge.id)

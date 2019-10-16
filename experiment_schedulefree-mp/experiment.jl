@@ -84,23 +84,22 @@ y_t = observation node
 graph = MetaGraph(PathGraph(5))
 
 # Previous state
-set_props!(graph, 1, Dict{Symbol,Any}(:object => :x_tmin, :id => "x_tmin", :type => "variable"))
+set_props!(graph, 1, Dict{Symbol,Any}(:id => "x_tmin", :type => "variable"))
 
 # State transition node
-set_props!(graph, 2, Dict{Symbol,Any}(:object => :g_t, :id => "g_t", :type => "factor"))
+set_props!(graph, 2, Dict{Symbol,Any}(:id => "g_t", :type => "factor"))
 
 # Current state
-set_props!(graph, 3, Dict{Symbol,Any}(:object => :x_t, :id => "x_t", :type => "variable"))
+set_props!(graph, 3, Dict{Symbol,Any}(:id => "x_t", :type => "variable"))
 
 # Observation likelihood node
-set_props!(graph, 4, Dict{Symbol,Any}(:object => :f_t, :id => "f_t", :type => "factor"))
+set_props!(graph, 4, Dict{Symbol,Any}(:id => "f_t", :type => "factor"))
 
 # Observation
-set_props!(graph, 5, Dict{Symbol,Any}(:object => :y_t, :id => "y_t", :type => "variable"))
+set_props!(graph, 5, Dict{Symbol,Any}(:id => "y_t", :type => "variable"))
 
 # Ensure vertices can be recalled from given id
 set_indexing_prop!(graph, :id)
-set_indexing_prop!(graph, :object)
 
 """
 Run inference procedure

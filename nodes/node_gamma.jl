@@ -169,10 +169,10 @@ function act(node::NodeGamma, edge_id::String, graph::MetaGraph)
     outgoing_message = message(node, edge_id)
 
     # Find edge based on edge id
-    edge = eval(graph[graph[edge_id, :id], :object])
+    edge = eval(Symbol(graph[edge_id, :id]))
 
     # Check if edge is blocked
-    if edge.block == false
+    if !edge.block
 
         # Check heuristics for blocking
         if node.heuristics["backwards_in_time"] | (edge.time >= node.time)
