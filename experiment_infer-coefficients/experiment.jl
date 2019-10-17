@@ -14,6 +14,7 @@ pyplot()
 # Factor graph components
 include("../nodes/node_gamma.jl")
 include("../nodes/node_gaussian.jl")
+include("../nodes/node_equality.jl")
 include("../nodes/transition_gaussian.jl")
 include("../nodes/likelihood_gaussian.jl")
 include("../edges/edge_gaussian.jl")
@@ -29,7 +30,7 @@ Experiment parameters
 """
 
 # Signal time horizon
-T = 50
+T = 500
 
 # Reaction-time clock
 TT = 10
@@ -39,21 +40,21 @@ gain = 0.8
 emission = 1.0
 
 # Noise parameters (variance form)
-measurement_noise = 0.5
-process_noise = 0.5
+measurement_noise = 0.3
+process_noise = 1.4
 
 # Clamped parameters (mean-precision, shape-scale form)
-x_0_params = [0.0, 0.1]
-Γ_params = [1.0, 1.0]
-A_params = [0.5, 1.0]
+x0_params = [0.0, 0.1]
+γ0_params = [1.0, 1.0]
+a0_params = [0.5, 1.0]
 
 # Generate data
 observed, hidden = gendata_LGDS(gain,
                                 emission,
                                 process_noise,
                                 measurement_noise,
-                                x_0_params[1],
-                                x_0_params[2],
+                                x0_params[1],
+                                x0_params[2],
                                 time_horizon=T)
 
 """
@@ -64,81 +65,94 @@ p(y_{1:T}, x_{0:T} | u_{1:T}) = p(x_0) Π_t p(y_t, x_t | x_{t-1})
 
 In other words, Markov chains of time-slices of a state-space models.
 Below, we specify the following model through the time-slice subgraph
-             _     _
-          A |_|   |_| Γ
-             |     |
-         a_t ∘     ∘ γ_t
-             |_____|       x_t
-.. ---∘---->|_______|----->|=|-----> ...
-    x_t-1      g_t          |
-                            |
-                           |_| f_t
-                            |
-                            ∘
-                           y_t
+
+               e_a
+...   (a')---->[=]-----------(a'')     ...
+                |
+                |    e_γ
+...   (γ')------|--->[=]-----(γ'')     ...
+               (a)    |
+                |    (γ)
+                |_____|       ___
+...  (x_t-1)-->|__g_t__|-----(x_t)     ...
+                               |
+                              _|_
+                             |f_t|
+                               |
+                               ⊡
+                              y_t
 
 x_t-1   = previous state edge
 g_t     = state transition edge
-γ_t     = process noise edge
-γ       = process noise prior node
-a_t     = transition coefficient edge
-A       = transition coefficient prior node
+γ       = process noise edge
+γp      = previous process noise
+γpp     = next process noise
+a       = transition coefficient edge
+ap      = previous transition coefficient
+app     = next transition coefficient
 x_t     = current state edge
 f_t     = likelihood node
 y_t     = observation node
 """
 
 # Start graph
-graph = MetaGraph(SimpleGraph(9))
+graph = MetaGraph(SimpleGraph(13))
 
 # Previous state edge
-x_tmin = EdgeGaussian("x_tmin")
-set_props!(graph, 1, Dict{Symbol,Any}(:object => :x_tmin, :id => "x_tmin"))
+set_props!(graph, 1, Dict{Symbol,Any}(:id => "x_tmin", :type => "variable"))
 
 # State transition node
-g_t = TransitionGaussian("g_t")
-set_props!(graph, 2, Dict{Symbol,Any}(:object => :g_t, :id => "g_t"))
+set_props!(graph, 2, Dict{Symbol,Any}(:id => "g_t", :type => "factor"))
 
 # Process noise edge
-γ_t = EdgeGamma("γ_t")
-set_props!(graph, 3, Dict{Symbol,Any}(:object => :γ_t, :id => "γ_t"))
+set_props!(graph, 3, Dict{Symbol,Any}(:id => "γ", :type => "variable"))
 
-# Process noise prior node
-Γ = NodeGamma("Γ")
-set_props!(graph, 4, Dict{Symbol,Any}(:object => :Γ, :id => "Γ"))
+# Process noise equality node
+set_props!(graph, 4, Dict{Symbol,Any}(:id => "e_γ", :type => "factor"))
+
+# Previous process noise
+set_props!(graph, 5, Dict{Symbol,Any}(:id => "γp", :type => "variable"))
+
+# Next process noise
+set_props!(graph, 6, Dict{Symbol,Any}(:id => "γpp", :type => "variable"))
 
 # Transition coefficient edge
-a_t = EdgeGaussian("a_t")
-set_props!(graph, 5, Dict{Symbol,Any}(:object => :a_t, :id => "a_t"))
+set_props!(graph, 7, Dict{Symbol,Any}(:id => "a", :type => "variable"))
 
-# Transition coefficient prior node
-A = NodeGaussian("A")
-set_props!(graph, 6, Dict{Symbol,Any}(:object => :A, :id => "A"))
+# Transition coefficient equality node
+set_props!(graph, 8, Dict{Symbol,Any}(:id => "e_a", :type => "factor"))
+
+# Previous transition coefficient edge
+set_props!(graph, 9, Dict{Symbol,Any}(:id => "ap", :type => "variable"))
+
+# Next transition coefficient edge
+set_props!(graph, 10, Dict{Symbol,Any}(:id => "app", :type => "variable"))
 
 # Current state edge
-x_t = EdgeGaussian("x_t")
-set_props!(graph, 7, Dict{Symbol,Any}(:object => :x_t, :id => "x_t"))
+set_props!(graph, 11, Dict{Symbol,Any}(:id => "x_t", :type => "variable"))
 
 # Observation likelihood node
-f_t = LikelihoodGaussian("f_t")
-set_props!(graph, 8, Dict{Symbol,Any}(:object => :f_t, :id => "f_t"))
+set_props!(graph, 12, Dict{Symbol,Any}(:id => "f_t", :type => "factor"))
 
 # Observation edge
-y_t = EdgeDelta("y_t")
-set_props!(graph, 9, Dict{Symbol,Any}(:object => :y_t, :id => "y_t"))
+set_props!(graph, 13, Dict{Symbol,Any}(:id => "y_t", :type => "variable"))
+
 
 add_edge!(graph, 1, 2) # x_t-1 -- g_t
-add_edge!(graph, 2, 3) # g_t -- γ_t
-add_edge!(graph, 3, 4) # γ_t -- Γ
-add_edge!(graph, 2, 5) # g_t -- a_t
-add_edge!(graph, 5, 6) # a_t -- A
-add_edge!(graph, 2, 7) # g_t -- x_t
-add_edge!(graph, 7, 8) # x_t -- f_t
-add_edge!(graph, 8, 9) # f_t -- y_t
+add_edge!(graph, 2, 3) # g_t -- γ
+add_edge!(graph, 3, 4) # γ -- e_γ
+add_edge!(graph, 4, 5) # e_γ -- γp
+add_edge!(graph, 4, 6) # e_γ -- γpp
+add_edge!(graph, 2, 7) # g_t -- a
+add_edge!(graph, 7, 8) # a -- e_a
+add_edge!(graph, 8, 9) # e_a -- ap
+add_edge!(graph, 8, 10) # e_a -- app
+add_edge!(graph, 2, 11) # g_t -- x_t
+add_edge!(graph, 11, 12) # x_t -- f_t
+add_edge!(graph, 12, 13) # f_t -- y_t
 
 # Ensure vertices can be recalled from given id
 set_indexing_prop!(graph, :id)
-set_indexing_prop!(graph, :object)
 
 """
 Run inference procedure
@@ -151,9 +165,9 @@ estimated_transition = zeros(T, 2, TT)
 free_energy_gradients = zeros(T, TT)
 
 # Set state prior x_0
-global x_t = EdgeGaussian("x_0"; mean=x_0_params[1], precision=x_0_params[2])
-global a_t = EdgeGaussian("a_0"; mean=A_params[1], precision=A_params[2])
-global γ_t = EdgeGamma("γ_0"; shape=Γ_params[1], scale=Γ_params[2])
+global x_t = EdgeGaussian("x_0"; mean=x0_params[1], precision=x0_params[2])
+global app = EdgeGaussian("a_0"; mean=a0_params[1], precision=a0_params[2])
+global γpp = EdgeGamma("γ_0"; shape=γ0_params[1], scale=γ0_params[2])
 
 for t = 1:T
 
@@ -163,22 +177,34 @@ for t = 1:T
       end
 
       # Previous state
-      global x_tmin = EdgeGaussian("x_tmin", mean=x_t.mean, precision=x_t.precision)
+      global x_tmin = EdgeGaussian("x_tmin", mean=x_t.mean, precision=x_t.precision, block=true)
+
+      # Previous transition coefficient
+      global ap = EdgeGaussian("ap", mean=app.mean, precision=app.precision, block=true)
+
+      # Previous process noise
+      global γp = EdgeGamma("γp", shape=γpp.shape, scale=γpp.scale, block=true)
 
       # State transition node
-      global g_t = TransitionGaussian("g_t", edge_mean="x_tmin", edge_data="x_t", edge_precision="γ_t", edge_transition="a_t")
-
-      # Process noise prior node
-      global Γ = NodeGamma("Γ", edge_data="γ_t", edge_shape=γ_t.shape, edge_scale=γ_t.scale)
+      global g_t = TransitionGaussian("g_t", edge_mean="x_tmin", edge_data="x_t", edge_precision="γ", edge_transition="a")
 
       # Process noise edge
-      global γ_t = EdgeGamma("γ_t", shape=γ_t.shape, scale=γ_t.scale)
+      global γ = EdgeGamma("γ", shape=γpp.shape, scale=γpp.scale)
 
-      # Transition coefficient prior node
-      global A = NodeGaussian("A", edge_data="a_t", edge_mean=a_t.mean, edge_precision=a_t.precision)
+      # Process noise equality
+      global e_γ = NodeEquality("e_γ", edges=["γ", "γp", "γpp"])
+
+      # Next process noise
+      global γpp = EdgeGamma("γpp", shape=γpp.shape, scale=γpp.scale, silent=true)
 
       # Transition coefficient edge
-      global a_t = EdgeGaussian("a_t", mean=a_t.mean, precision=a_t.precision)
+      global a = EdgeGaussian("a", mean=app.mean, precision=app.precision)
+
+      # Transition coefficient equality node
+      global e_a = NodeEquality("e_a", edges=["a", "ap", "app"])
+
+      # Next transition coefficient
+      global app = EdgeGaussian("app", mean=app.mean, precision=app.precision, silent=true)
 
       # Current state
       global x_t = EdgeGaussian("x_t", mean=x_tmin.mean, precision=x_tmin.precision)
@@ -191,15 +217,21 @@ for t = 1:T
 
       # Start message routine
       act(x_tmin, belief(x_tmin), 1e12, graph);
+      act(γpp, belief(γpp), 1e12, graph);
+      act(app, belief(app), 1e12, graph);
 
       # Start clock for reactions
       for tt = 1:TT
 
         react(g_t, graph)
-        react(γ_t, graph)
-        react(Γ, graph)
-        react(a_t, graph)
-        react(A, graph)
+        react(γ, graph)
+        react(e_γ, graph)
+        react(γp, graph)
+        react(γpp, graph)
+        react(a, graph)
+        react(e_a, graph)
+        react(ap, graph)
+        react(app, graph)
         react(x_t, graph)
         react(f_t, graph)
         react(y_t, graph)
@@ -207,10 +239,10 @@ for t = 1:T
         # Write out estimated state parameters
         estimated_states[t, 1, tt] = x_t.mean
         estimated_states[t, 2, tt] = sqrt(1/x_t.precision)
-        estimated_noises[t, 1, tt] = γ_t.shape * γ_t.scale
-        estimated_noises[t, 2, tt] = γ_t.shape * γ_t.scale^2
-        estimated_transition[t, 1, tt] = a_t.mean
-        estimated_transition[t, 2, tt] = sqrt(1/a_t.precision)
+        estimated_noises[t, 1, tt] = γ.shape * γ.scale
+        estimated_noises[t, 2, tt] = sqrt(γ.shape * γ.scale^2)
+        estimated_transition[t, 1, tt] = a.mean
+        estimated_transition[t, 2, tt] = sqrt(1/a.precision)
 
         # Keep track of FE gradients
         free_energy_gradients[t, tt] = x_t.grad_free_energy
@@ -261,7 +293,7 @@ plot!(estimated_transition[:,1,end],
       fillcolor="blue",
       label="")
 xlabel!("time (t)")
-title!("Transition coefficient estimates, q(a_t)")
+title!("Transition coefficient estimates, q(a)")
 savefig(pwd()*"/experiment_infer-coefficients/viz/transition_estimates.png")
 
 # Visualize transition coefficient belief parameter trajectory
@@ -279,7 +311,7 @@ title!("Parameter trajectory of q(a_t) for t="*string(t))
 savefig(pwd()*"/experiment_infer-coefficients/viz/transition_parameter_trajectory_t" * string(t) * ".png")
 
 # Visualize final noise estimates over time
-plot(process_noise*ones(T,1), color="black", label="true process noise", linewidth=2)
+plot(inv(process_noise)*ones(T,1), color="black", label="true process noise", linewidth=2)
 plot!(estimated_noises[:,1,end], color="blue", label="estimates")
 plot!(estimated_noises[:,1,end],
       ribbon=[estimated_noises[:,2,end], estimated_noises[:,2,end]],
@@ -289,7 +321,7 @@ plot!(estimated_noises[:,1,end],
       fillcolor="blue",
       label="")
 xlabel!("time (t)")
-title!("Noise estimates, q(γ_t)")
+title!("Noise estimates, q(γ)")
 savefig(pwd()*"/experiment_infer-coefficients/viz/noise_estimates.png")
 
 # Visualize noise belief parameter trajectory
@@ -303,7 +335,7 @@ plot!(estimated_noises[t,1,1:end],
       fillcolor="blue",
       label="")
 xlabel!("iterations")
-title!("Parameter trajectory of q(γ_t) for t="*string(t))
+title!("Parameter trajectory of q(γ) at t="*string(t))
 savefig(pwd()*"/experiment_infer-coefficients/viz/noise_parameter_trajectory_t" * string(t) * ".png")
 
 # Visualize free energy gradients over time-series
