@@ -239,7 +239,6 @@ function message(node::TransitionGaussian, edge_id::String)
     Eu = mean(node.beliefs["control"])
     Vu = var(node.beliefs["control"])
 
-
     # Moments of mean belief
     Em = mean(node.beliefs["mean"])
     Vm = var(node.beliefs["mean"])
@@ -270,8 +269,9 @@ function message(node::TransitionGaussian, edge_id::String)
 
     elseif edge_name == "transition"
 
+        #TODO: possible bug
         # Supply sufficient statistics
-        message = Normal(Ex*Em/(Vm + Em^2), inv(Eγ*(Vm + Em^2)))
+        message = Normal(Ex*Em / (Vm + Em^2), inv(Eγ*(Vm + Em^2)))
 
     elseif edge_name == "control"
 
