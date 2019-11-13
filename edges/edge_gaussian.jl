@@ -1,9 +1,8 @@
 export EdgeGaussian
 
-using LinearAlgebra: norm
-using Distributions: Normal, mean, std, params
-using DataStructures: Queue, enqueue!, dequeue!
-using LightGraphs, MetaGraphs
+import LinearAlgebra: norm
+import DataStructures: Queue, enqueue!, dequeue!
+import Distributions: Normal, mean, std, var, params
 include("../util.jl")
 
 mutable struct EdgeGaussian
@@ -47,24 +46,43 @@ mutable struct EdgeGaussian
     end
 end
 
+function params(edge::EdgeGaussian)
+    "Parameters of current belief"
+    return edge.mean, inv(edge.precision)
+end
+
+function mean(edge::EdgeGaussian)
+    "Mean of current belief"
+    return edge.mean
+end
+
+function var(edge::EdgeGaussian)
+    "Variance of current belief"
+    return inv(edge.precision)
+end
+
+function moments(edge::EdgeGaussian)
+    "First two moments of current belief"
+    return mean(edge), var(edge)
+end
+
 function update(edge::EdgeGaussian)
     "Update recognition distribution as the product of messages"
 
     if !edge.block
 
-        # Initialize message
-        belief = Normal(0., Inf)
+        if length(edge.messages) > 0
 
-        # Loop over all incoming messages
-        for key in keys(edge.messages)
+            # Extract list of messages
+            messages = collect(values(edge.messages))
 
-            # Multiply the incoming beliefs
-            belief = belief * edge.messages[key]
+            # Updated belief is the product of incoming messages
+            new_belief = prod(messages)
+
+            # Store new parameters
+            edge.mean, stddev = params(new_belief)
+            edge.precision = inv(stddev^2)
         end
-
-        # Store parameters
-        edge.mean, variance = params(belief)
-        edge.precision = inv(variance)
 
         return Nothing
     end
@@ -72,7 +90,7 @@ end
 
 function belief(edge::EdgeGaussian)
     "Outgoing message is belief over variable (recognition distribution)"
-    return Normal(edge.mean, inv(edge.precision))
+    return Normal(edge.mean, sqrt(inv(edge.precision)))
 end
 
 function entropy(edge::EdgeGaussian)

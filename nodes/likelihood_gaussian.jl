@@ -85,21 +85,11 @@ function energy(node::LikelihoodGaussian)
 
     Assumes Gaussian distributions for x,m,b and Gamma for γ.
     """
-
-    # Moments of emission belief
-    Eb = mean(node.beliefs["emission"])
-    Vb = var(node.beliefs["emission"])
-
-    # Moments of mean belief
-    Em = mean(node.beliefs["mean"])
-    Vm = var(node.beliefs["mean"])
-
-    # Moments of data belief
-    Ex = mean(node.beliefs["data"])
-    Vx = var(node.beliefs["data"])
-
-    # Moments of precision belief
-    Eγ = mean(node.beliefs["precision"])
+    # Moments of beliefs
+    Eb, Vb = moments(node.beliefs["emission"])
+    Em, Vm = moments(node.beliefs["mean"])
+    Ex, Vx = moments(node.beliefs["data"])
+    Eγ, Vγ = moments(node.beliefs["precision"])
 
     # Check whether precision is clamped
     if isa(node.beliefs["precision"], Gamma)
@@ -128,20 +118,11 @@ function grad_energy(node::LikelihoodGaussian, edge_id::String)
     # Get edge name from edge id
     edge_name = key_from_value(node.connected_edges, edge_id)
 
-    # Moments of emission belief
-    Eb = mean(node.beliefs["emission"])
-    Vb = var(node.beliefs["emission"])
-
-    # Moments of mean belief
-    Em = mean(node.beliefs["mean"])
-    Vm = var(node.beliefs["mean"])
-
-    # Moments of data belief
-    Ex = mean(node.beliefs["data"])
-    Vx = var(node.beliefs["data"])
-
-    # Moments of precision belief
-    Eγ = mean(node.beliefs["precision"])
+    # Moments of beliefs
+    Eb, Vb = moments(node.beliefs["emission"])
+    Em, Vm = moments(node.beliefs["mean"])
+    Ex, Vx = moments(node.beliefs["data"])
+    Eγ, Vγ = moments(node.beliefs["precision"])
 
     if edge_name == "data"
 
@@ -198,30 +179,21 @@ function message(node::LikelihoodGaussian, edge_id::String)
     # Get edge name from edge id
     edge_name = key_from_value(node.connected_edges, edge_id)
 
-    # Moments of emission belief
-    Eb = mean(node.beliefs["emission"])
-    Vb = var(node.beliefs["emission"])
-
-    # Moments of mean belief
-    Em = mean(node.beliefs["mean"])
-    Vm = var(node.beliefs["mean"])
-
-    # Moments of data belief
-    Ex = mean(node.beliefs["data"])
-    Vx = var(node.beliefs["data"])
-
-    # Moments of precision belief
-    Eγ = mean(node.beliefs["precision"])
+    # Moments of beliefs
+    Eb, Vb = moments(node.beliefs["emission"])
+    Em, Vm = moments(node.beliefs["mean"])
+    Ex, Vx = moments(node.beliefs["data"])
+    Eγ, Vγ = moments(node.beliefs["precision"])
 
     if edge_name == "data"
 
         # Supply sufficient statistics
-        message = Normal(Eb*Em, inv(Eγ))
+        message = Normal(Eb*Em, sqrt(inv(Eγ)))
 
     elseif edge_name == "mean"
 
         # Supply sufficient statistics
-        message = Normal(Ex*Eb / (Vb + Eb^2), inv(Eγ*(Vb + Eb^2)))
+        message = Normal(Ex*Eb / (Vb + Eb^2), sqrt(inv(Eγ*(Vb + Eb^2))))
 
     elseif edge_name == "precision"
 
@@ -233,7 +205,7 @@ function message(node::LikelihoodGaussian, edge_id::String)
     elseif edge_name == "emission"
 
         # Supply sufficient statistics
-        message = Normal(Ex*Em/(Vm + Em^2), inv(Eγ*(Vm + Em^2)))
+        message = Normal(Ex*Em/(Vm + Em^2), sqrt(inv(Eγ*(Vm + Em^2))))
 
     else
         throw("Exception: edge id unknown.")

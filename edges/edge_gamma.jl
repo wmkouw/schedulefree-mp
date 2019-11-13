@@ -1,9 +1,9 @@
 export EdgeGamma
 
-using LinearAlgebra: norm
-using Distributions: Gamma, mean, params
-using DataStructures: Queue, enqueue!, dequeue!
-using SpecialFunctions: gamma, digamma, polygamma
+import LinearAlgebra: norm
+import Distributions: Gamma, mean, std, var, params
+import DataStructures: Queue, enqueue!, dequeue!
+import SpecialFunctions: gamma, digamma, polygamma
 include("../util.jl")
 
 mutable struct EdgeGamma
@@ -49,6 +49,26 @@ mutable struct EdgeGamma
         self = new(id, time, block, silent, shape, scale, free_energy, grad_free_energy, messages)
         return self
     end
+end
+
+function params(edge::EdgeGamma)
+    "Parameters of current belief"
+    return edge.shape, edge.scale
+end
+
+function mean(edge::EdgeGamma)
+    "Mean of current belief"
+    return edge.shape * edge.scale
+end
+
+function var(edge::EdgeGamma)
+    "Variance of current belief"
+    return edge.shape * edge.scale^2
+end
+
+function moments(edge::EdgeGamma)
+    "First two moments of current belief"
+    return mean(edge), var(edge)
 end
 
 function update(edge::EdgeGamma)
@@ -111,7 +131,7 @@ function free_energy(edge::EdgeGamma, graph::MetaGraph)
 
     # Initialize node energies
     U = 0
-    
+
     # Extract connecting nodes
     neighbours = neighbors(graph, graph[edge.id, :id])
 

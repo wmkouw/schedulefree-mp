@@ -72,33 +72,27 @@ function energy(node::NodeGaussian)
     Assumes Gaussian distributions for x,m and Gamma for γ.
     """
 
-        # Moments of mean belief
-        Em = mean(node.beliefs["mean"])
-        Vm = var(node.beliefs["mean"])
+    # Moments of beliefs
+    Em, Vm = moments(node.beliefs["mean"])
+    Ex, Vx = moments(node.beliefs["data"])
+    Eγ, Vγ = moments(node.beliefs["precision"])
 
-        # Moments of data belief
-        Ex = mean(node.beliefs["data"])
-        Vx = var(node.beliefs["data"])
+    # Check whether precision is clamped
+    if isa(node.beliefs["precision"], Gamma)
 
-        # Moments of precision belief
-        Eγ = mean(node.beliefs["precision"])
+        # Extract parameters
+        shape, scale = params(node.beliefs["precision"])
 
-        # Check whether precision is clamped
-        if isa(node.beliefs["precision"], Gamma)
-
-            # Extract parameters
-            shape, scale = params(node.beliefs["precision"])
-
-            # Expectation of the log of precision
-            Elogγ = digamma(shape) + log(scale)
-        else
-            # Expectation of the log of fixed precision
-            Elogγ = log(Eγ)
-        end
-
-        # -log-likelihood of Gaussian with expected parameters
-        return 1/2*log(2*pi) - 1/2*Elogγ + Eγ/2*(Vx + (Ex -Em)^2 + Vm)
+        # Expectation of the log of precision
+        Elogγ = digamma(shape) + log(scale)
+    else
+        # Expectation of the log of fixed precision
+        Elogγ = log(Eγ)
     end
+
+    # -log-likelihood of Gaussian with expected parameters
+    return 1/2*log(2*pi) - 1/2*Elogγ + Eγ/2*(Vx + (Ex -Em)^2 + Vm)
+end
 
 function grad_energy(node::NodeGaussian, edge_id::String)
     """
@@ -110,16 +104,10 @@ function grad_energy(node::NodeGaussian, edge_id::String)
     # Get edge name from edge id
     edge_name = key_from_value(node.connected_edges, edge_id)
 
-    # Moments of mean belief
-    Em = mean(node.beliefs["mean"])
-    Vm = var(node.beliefs["mean"])
-
-    # Moments of data belief
-    Ex = mean(node.beliefs["data"])
-    Vx = var(node.beliefs["data"])
-
-    # Moments of precision belief
-    Eγ = mean(node.beliefs["precision"])
+    # Moments of beliefs
+    Em, Vm = moments(node.beliefs["mean"])
+    Ex, Vx = moments(node.beliefs["data"])
+    Eγ, Vγ = moments(node.beliefs["precision"])
 
     if edge_name == "data"
 
@@ -166,33 +154,27 @@ function message(node::NodeGaussian, edge_id::String)
     # Get edge name from edge id
     edge_name = key_from_value(node.connected_edges, edge_id)
 
-    # Moments of mean belief
-    Em = mean(node.beliefs["mean"])
-    Vm = var(node.beliefs["mean"])
-
-    # Moments of data belief
-    Ex = mean(node.beliefs["data"])
-    Vx = var(node.beliefs["data"])
-
-    # Moments of precision belief
-    Eγ = mean(node.beliefs["precision"])
+    # Moments of beliefs
+    Em, Vm = moments(node.beliefs["mean"])
+    Ex, Vx = moments(node.beliefs["data"])
+    Eγ, Vγ = moments(node.beliefs["precision"])
 
     if edge_name == "data"
 
         # Supply sufficient statistics
-        message = Normal(Em, inv(Eγ))
+        message = Normal(Em, sqrt(inv(Eγ)))
 
     elseif edge_name == "mean"
 
         # Supply sufficient statistics
-        message = Normal(Ex, inv(Eγ))
+        message = Normal(Ex, sqrt(inv(Eγ)))
 
     elseif edge_name == "precision"
 
         # Supply sufficient statistics
-        inv_shape = (Vx + (Ex - Em)^2 + Vm)/2
+        inv_scale = (Vx + (Ex - Em)^2 + Vm)/2
 
-        message = Gamma(3/2, inv(inv_shape))
+        message = Gamma(3/2, inv(inv_scale))
 
     else
         throw("Exception: edge id unknown.")

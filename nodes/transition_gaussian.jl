@@ -1,7 +1,7 @@
 export TransitionGaussian
 
-using Distributions: Normal, Gamma, mean
-using DataStructures: Queue, enqueue!, dequeue!
+import Distributions: Normal, Gamma, mean, std, var, params
+import DataStructures: Queue, enqueue!, dequeue!
 include("../util.jl")
 
 mutable struct TransitionGaussian
@@ -98,27 +98,12 @@ function energy(node::TransitionGaussian)
     Assumes Gaussian distributions for x,m,a,u and Gamma for γ.
     """
 
-    # Moments of transition belief
-    Ea = mean(node.beliefs["transition"])
-    Va = var(node.beliefs["transition"])
-
-    # Moments of control belief
-    Eu = mean(node.beliefs["control"])
-    Vu = var(node.beliefs["control"])
-
-    # Moments of mean belief
-    Em = mean(node.beliefs["mean"])
-    Vm = var(node.beliefs["mean"])
-
-    # Moments of data belief
-    Ex = mean(node.beliefs["data"])
-    Vx = var(node.beliefs["data"])
-
-    # Moments of precision belief
-    Eγ = mean(node.beliefs["precision"])
-
-    # Moments of precision belief
-    Eγ = mean(node.beliefs["precision"])
+    # Moments of beliefs
+    Ea, Va = moments(node.beliefs["transition"])
+    Eu, Vu = moments(node.beliefs["control"])
+    Em, Vm = moments(node.beliefs["mean"])
+    Ex, Vx = moments(node.beliefs["data"])
+    Eγ, Vγ = moments(node.beliefs["precision"])
 
     # Check whether precision is clamped
     if isa(node.beliefs["precision"], Gamma)
@@ -147,24 +132,12 @@ function grad_energy(node::TransitionGaussian, edge_id::String)
     # Get edge name from edge id
     edge_name = key_from_value(node.connected_edges, edge_id)
 
-    # Moments of transition belief
-    Ea = mean(node.beliefs["transition"])
-    Va = var(node.beliefs["transition"])
-
-    # Moments of control belief
-    Eu = mean(node.beliefs["control"])
-    Vu = var(node.beliefs["control"])
-
-    # Moments of mean belief
-    Em = mean(node.beliefs["mean"])
-    Vm = var(node.beliefs["mean"])
-
-    # Moments of data belief
-    Ex = mean(node.beliefs["data"])
-    Vx = var(node.beliefs["data"])
-
-    # Moments of precision belief
-    Eγ = mean(node.beliefs["precision"])
+    # Moments of beliefs
+    Ea, Va = moments(node.beliefs["transition"])
+    Eu, Vu = moments(node.beliefs["control"])
+    Em, Vm = moments(node.beliefs["mean"])
+    Ex, Vx = moments(node.beliefs["data"])
+    Eγ, Vγ = moments(node.beliefs["precision"])
 
     if edge_name == "data"
 
@@ -231,34 +204,22 @@ function message(node::TransitionGaussian, edge_id::String)
     # Get edge name from edge id
     edge_name = key_from_value(node.connected_edges, edge_id)
 
-    # Moments of transition belief
-    Ea = mean(node.beliefs["transition"])
-    Va = var(node.beliefs["transition"])
-
-    # Moments of control belief
-    Eu = mean(node.beliefs["control"])
-    Vu = var(node.beliefs["control"])
-
-    # Moments of mean belief
-    Em = mean(node.beliefs["mean"])
-    Vm = var(node.beliefs["mean"])
-
-    # Moments of data belief
-    Ex = mean(node.beliefs["data"])
-    Vx = var(node.beliefs["data"])
-
-    # Moments of precision belief
-    Eγ = mean(node.beliefs["precision"])
+    # Moments of beliefs
+    Ea, Va = moments(node.beliefs["transition"])
+    Eu, Vu = moments(node.beliefs["control"])
+    Em, Vm = moments(node.beliefs["mean"])
+    Ex, Vx = moments(node.beliefs["data"])
+    Eγ, Vγ = moments(node.beliefs["precision"])
 
     if edge_name == "data"
 
         # Supply sufficient statistics
-        message = Normal(Ea*Em, inv(Eγ))
+        message = Normal(Ea*Em, sqrt(inv(Eγ)))
 
     elseif edge_name == "mean"
 
         # Supply sufficient statistics
-        message = Normal(Ex*Ea / (Va + Ea^2), inv(Eγ*(Va + Ea^2)))
+        message = Normal(Ex*Ea / (Va + Ea^2), sqrt(inv(Eγ*(Va + Ea^2))))
 
     elseif edge_name == "precision"
 
@@ -271,7 +232,7 @@ function message(node::TransitionGaussian, edge_id::String)
 
         #TODO: possible bug
         # Supply sufficient statistics
-        message = Normal(Ex*Em / (Vm + Em^2), inv(Eγ*(Vm + Em^2)))
+        message = Normal(Ex*Em / (Vm + Em^2), sqrt(inv(Eγ*(Vm + Em^2))))
 
     elseif edge_name == "control"
 

@@ -9,11 +9,11 @@ mutable struct NodeEquality
 
     This node has the function:
     f(x,y,z) = δ(z - x) δ(z - y)
-           ___
-    x --->[_f_]---> z
-            ^
-            |
-            y
+           _
+    x --->[=]---> z
+           ^
+           |
+           y
     """
 
     # Identifiers of edges/nodes in factor graph

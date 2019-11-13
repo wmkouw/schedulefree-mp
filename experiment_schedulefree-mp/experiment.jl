@@ -80,6 +80,8 @@ f_t = likelihood node
 y_t = observation node
 """
 
+CPUtic()
+
 # Start graph
 graph = MetaGraph(PathGraph(5))
 
@@ -156,6 +158,8 @@ for t = 1:T
     end
 end
 
+CPUtoc()
+
 """
 Visualize experimental results
 """
@@ -171,7 +175,7 @@ plot!(estimated_states[:,1,end],
       fillcolor="blue",
       label="")
 scatter!(observed, color="black", label="observations")
-savefig(joinpath(@__DIR__, "viz/state_estimates.png"))
+savefig(joinpath(@__DIR__, "viz/state_estimates_experiment.png"))
 
 # Visualize parameter trajectory
 t = T
@@ -191,18 +195,18 @@ xlabel!("time (t)")
 ylabel!("Free energies over states")
 savefig(joinpath(@__DIR__, "viz/FE_states.png"))
 
-# Visualize FE gradient for a specific time-step
-t = T
-plot(free_energies[t,:], color="blue", label="F[q(x_t="*string(t)*")]", yscale=:log10)
-savefig(joinpath(@__DIR__, "viz/FE_trajectory_t" * string(t) * ".png"))
+# # Visualize FE gradient for a specific time-step
+# t = T
+# plot(free_energies[t,:], color="blue", label="F[q(x_t="*string(t)*")]", yscale=:log10)
+# savefig(joinpath(@__DIR__, "viz/FE_trajectory_t" * string(t) * ".png"))
 
 # Visualize free energy gradients over time-series
 plot(free_energy_gradients[2:end,end].+1e-15, color="black", label="||dF||_t", yscale=:log10)
 xlabel!("time (t)")
 ylabel!("Norm of free energy gradient")
 savefig(joinpath(@__DIR__, "viz/FE_gradients.png"))
-
-# Visualize FE gradient for a specific time-step
-t = T
-plot(free_energy_gradients[t,:], color="blue", label="||dF||_t="*string(t), yscale=:log10)
-savefig(joinpath(@__DIR__, "viz/FE-gradient_trajectory_t" * string(t) * ".png"))
+#
+# # Visualize FE gradient for a specific time-step
+# t = T
+# plot(free_energy_gradients[t,:], color="blue", label="||dF||_t="*string(t), yscale=:log10)
+# savefig(joinpath(@__DIR__, "viz/FE-gradient_trajectory_t" * string(t) * ".png"))

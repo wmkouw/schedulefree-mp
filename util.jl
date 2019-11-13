@@ -7,7 +7,7 @@ Wouter Kouw
 
 export Delta
 
-import Base:*
+import Base: *
 import Statistics: mean, var
 import LightGraphs: edges
 
@@ -36,38 +36,59 @@ function var(d::Delta)
     return 0.0
 end
 
+function moments(d::Delta)
+    return mean(d), var(d)
+end
+
+function moments(p::Normal)
+    "First two moments of a Normal distribution"
+    return mean(p), var(p)
+end
+
+function moments(p::Gamma)
+    "First two moments of a Gamma distribution"
+    return mean(p), var(p)
+end
+
 function *(px::Normal{Float64}, qx::Normal{Float64})
     "Multiplication of two normal distributions of the same variable."
 
     # Extract parameters
-    mu_p, si2_p = params(px)
-    mu_q, si2_q = params(qx)
+    μ_p, σ_p = params(px)
+    μ_q, σ_q = params(qx)
+
+    # Compute precisions
+    τ_p = inv(σ_p^2)
+    τ_q = inv(σ_q^2)
 
     # Add precisions
-    W = inv(si2_p) + inv(si2_q)
+    τ = τ_p + τ_q
 
     # Add precision-weighted means
-    Wm = inv(si2_p)*mu_p + inv(si2_q)*mu_q
+    τμ = τ_p*μ_p + τ_q*μ_q
 
-    # Return normal distribution in mean-variance parameterization
-    return Normal(inv(W)*Wm, inv(W))
+    # Compute new variance
+    σ2 = inv(τ)
+
+    # Return normal distribution in mean-stddev parameterization
+    return Normal(σ2*τμ, sqrt(σ2))
 end
 
 function *(px::Gamma{Float64}, qx::Gamma{Float64})
-    "Multiplication of two gamma distributions of the same variable."
+    "Multiplication of two Gamma distributions of the same variable."
 
     # Extract parameters
     shape_p, scale_p = params(px)
     shape_q, scale_q = params(qx)
 
     # Add shapes
-    shape = shape_p + shape_q
+    new_shape = shape_p + shape_q
 
-    # Add scales
-    scale = inv(scale_p) + inv(scale_q)
+    # Add inverse scales
+    new_scale = inv(inv(scale_p) + inv(scale_q))
 
     # Return gamma distribution in shape-scale parameterization
-    return Gamma(shape-1., inv(scale))
+    return Gamma(new_shape - 1., new_scale)
 end
 
 function key_from_value(d::Dict{String,String}, k::String)
