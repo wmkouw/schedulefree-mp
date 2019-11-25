@@ -1,7 +1,5 @@
-# Reactive Message-Passing
+# Schedule-free variational message-passing
 
-We want message passing in ForneyLab to be _reactive_: each node should only respond to incoming messages if sending out a message will reduce free energy sufficiently. In order to make this decision, the nodes and edges need access to local free energies.
+We want message passing in ForneyLab to be free of an explicit message scheduler, which allows for scaling to larger graphs. There are a number of potential procedures for local message-passing that converge to similar beliefs as the scheduler. We are studying technical issues and efficiency.
 
-Here I experiment with how reactive message passing should occur in various factor graphs.
-
-The repo is closed until deemed mature.
+This repo is closed until deemed mature.
