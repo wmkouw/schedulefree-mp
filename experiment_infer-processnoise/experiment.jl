@@ -1,33 +1,29 @@
 # Reactive message-passing in linear Gaussian dynamical system
-# Experiment to infer process noise
+# Experiment to infer states and process noise simultaneously
 #
 # Wouter Kouw, BIASlab
-# 15-08-2019
+# 02-01-2020
 
 using Random
 using Revise
-using CPUTime
-using JLD
 using Distributions
 using DataStructures
-using LightGraphs, MetaGraphs
+using LightGraphs
+using MetaGraphs
+using CPUTime
 using Plots
 pyplot()
 
 # Factor graph components
-include("../nodes/node_equality.jl")
-include("../nodes/node_gamma.jl")
-include("../nodes/node_gaussian.jl")
-include("../nodes/transition_gaussian.jl")
-include("../nodes/likelihood_gaussian.jl")
-include("../edges/edge_gaussian.jl")
-include("../edges/edge_gamma.jl")
-include("../edges/edge_delta.jl")
+include("../factor_nodes/factor_gaussian.jl")
+include("../factor_nodes/factor_gamma.jl")
+include("../variables/var_gaussian.jl")
+include("../variables/var_gamma.jl")
+include("../variables/var_delta.jl")
 include("../util.jl")
 
 # Data
 include("../gen_data.jl")
-
 
 """
 Experiment parameters
@@ -39,33 +35,26 @@ T = 50
 # Reaction-time clock
 TT = 10
 
-# Known transition and observation matrices
-gain = 1.0
+# Transition and observation matrices
+gain = 0.8
 emission = 1.0
 
-# Noise parameters
-process_noise = 0.8
-measurement_noise = 0.3
+# Noises (variance form)
+process_noise = 2.0
+measurement_noise = 0.5
 
-# Clamped parameters
-params_x0 = [0.0, 1.0]
-params_γ0 = [1.0, 1.0]
+# Parameters for state x_0
+px0 = Normal(0.0, 1.0)
 
 # Generate data
+Random.seed!(256)
 observed, hidden = gendata_LGDS(gain,
                                 emission,
                                 process_noise,
                                 measurement_noise,
-                                params_x0[1],
-                                params_x0[2],
+                                mean(px0),
+                                inv(var(px0)),
                                 time_horizon=T)
-
-# # Write data set to file
-# save(pwd()*"/experiment_infer-processnoise/data/LGDS_T"*string(T)*".jld", "observed", observed, "hidden", hidden)
-
-# X = load(pwd()*"/experiment_infer-processnoise/data/LGDS_T"*string(T)*".jld")
-# observed = X["observed"]
-# hidden = X["hidden"]
 
 """
 Model/graph specification
@@ -75,143 +64,148 @@ p(y_{1:T}, x_{0:T} | u_{1:T}) = p(x_0) Π_t p(y_t | x_t) p(x_t | x_{t-1})
 
 In other words, Markov chains of time-slices of a state-space models.
 Below, we specify the following model through the time-slice subgraph
-
-
-... (γ_t-1)----[e_γ]               ...
+				 _
+				[Γ]
                  |
-                _|_
-               (γ_t)
-                 |
-                _|_       ___
-... (x_t-1)--->[g_t]---->(x_t)     ...
-                           |
-                          _|_
-                         [f_t]
-                           |
-                           ⊡
-                          y_t
+                (γ)
+         ________|________________
+         |      _|_       ___    |
+(x_0)--  | --->[g_t]---->(x_t)---|
+         |                 |     |
+         |                _|_    |
+         |               [f_t]   |
+         |                 |     |
+         | T            [[y_t]]  |
+		 -------------------------
 
-x_t-1 = previous state edge
-γ_t-1 = previous process noise
-g_t = state transition edge
-e_γ = process noise equality
-γ_t = process noise edge
-x_t = current state edge
-f_t = likelihood node
-y_t = observation node
+x_t-1 = previous state variable
+g_t = state transition factor node
+γ = process noise variable
+Γ = process noise prior factor node
+x_t = current state variable
+f_t = likelihood factor node
+y_t = observed variable
+
+---------------------------------
+#TODO: Graph specification using a graphical user interface
 """
 
 CPUtic()
 
 # Start graph
-graph = MetaGraph(SimpleGraph(8))
+global graph = MetaGraph(SimpleGraph(4*T+3))
 
-# Edge variable: previous state
-set_props!(graph, 1, Dict{Symbol,Any}(:id => "x_tmin", :type => "variable"))
+let
 
-# Edge variable: previous process noise
-set_props!(graph, 2, Dict{Symbol,Any}(:id => "γ_tmin", :type => "variable"))
+# Set initial state variable
+set_props!(graph, 1, Dict(:id => :x_0,
+						  :time => 0,
+						  :node => VarGaussian(:x_0, marginal=px0, time=0)))
 
-# Factor node: state transition
-set_props!(graph, 3, Dict{Symbol,Any}(:id => "g_t", :type => "factor"))
+# Connect initial state prior to first state transition
+add_edge!(graph, (1, 4))
 
-# Edge variable: current process noise
-set_props!(graph, 4, Dict{Symbol,Any}(:id => "γ_t", :type => "variable"))
+# Process noise variable
+set_props!(graph, 2, Dict(:id => :γ,
+						  :time => nothing, #TODO: list of time-points
+						  :node => VarGamma(:γ, time=nothing)))
 
-# Factor node: process noise equality
-set_props!(graph, 5, Dict{Symbol,Any}(:id => "e_γ", :type => "factor"))
+# Process noise prior
+set_props!(graph, 3, Dict(:id => :Γ,
+						  :time => nothing,
+						  :node => FactorGamma(:Γ, out=:γ, shape=1.0, scale=1.0, time=nothing)))
 
-# Edge variable: current state
-set_props!(graph, 6, Dict{Symbol,Any}(:id => "x_t", :type => "variable"))
+# Connect process noise prior to noise variable
+add_edge!(graph, (2, 3))
 
-# Factor node: likelihood
-set_props!(graph, 7, Dict{Symbol,Any}(:id => "f_t", :type => "factor"))
+# Start node numbering
+node_num = 3
 
-# Edge variable: observation
-set_props!(graph, 8, Dict{Symbol,Any}(:id => "y_t", :type => "variable"))
+for t = 1:T
 
-# Add edges between factor nodes and variables
-add_edge!(graph, 1, 3) # x_t-1 -- g_t
-add_edge!(graph, 2, 5) # γ_t-1 -- e_γ
-add_edge!(graph, 3, 4) # g_t -- γ_t
-add_edge!(graph, 3, 6) # g_t -- x_t
-add_edge!(graph, 4, 5) # γ_t -- e_γ
-add_edge!(graph, 6, 7) # x_t -- f_t
-add_edge!(graph, 7, 8) # f_t -- y_t
+	# Cast current time to string
+	t_ = string(t)
+
+	# State transition node
+	props_gt = Dict(:id => Symbol("g_"*t_),
+				    :time => t,
+				    :node => FactorGaussian(Symbol("g_"*t_),
+								            out=Symbol("x_"*t_),
+	                                        mean=Symbol("x_"*string(t-1)),
+	                                        precision=:γ,
+	                                        transition=gain))
+
+	# Current state
+	props_xt = Dict(:id => Symbol("x_"*t_),
+				    :time => t,
+				    :node => VarGaussian(Symbol("x_"*t_), time=t))
+
+	# Observation likelihood node
+	props_ft = Dict(:id => Symbol("f_"*t_),
+				    :time => t,
+				    :node => FactorGaussian(Symbol("f_"*t_),
+		 						            out=Symbol("y_"*t_),
+		 							        mean=Symbol("x_"*t_),
+		 							        precision=inv(measurement_noise),
+		 							        transition=emission,
+		 							        time=t))
+
+	# Observation
+	props_yt = Dict(:id => Symbol("y_"*t_),
+				    :time => t,
+				    :node => VarDelta(Symbol("y_"*t_), observed[t], time=t))
+
+	# Add properties to nodes in current time-slice
+	set_props!(graph, node_num+1, props_gt)
+	set_props!(graph, node_num+2, props_xt)
+	set_props!(graph, node_num+3, props_ft)
+	set_props!(graph, node_num+4, props_yt)
+
+	# Add edges between factors and variables
+	add_edge!(graph, (node_num-2, node_num+1)) # x_t-1 -- g_t
+	add_edge!(graph, (node_num+1, node_num+2)) # g_t -- x_t
+	add_edge!(graph, (node_num+2, node_num+3)) # x_t -- f_t
+	add_edge!(graph, (node_num+3, node_num+4)) # f_t -- y_t
+	add_edge!(graph, (node_num+1, 2)) # g_t -- γ
+
+	# Increment node number
+	node_num += 4
+end
+end
 
 # Ensure vertices can be recalled from given id
 set_indexing_prop!(graph, :id)
 
 """
-Run inference procedure
+Inference: filtering
 """
 
-# Preallocation
-estimated_states = zeros(T, 2, TT)
-estimated_noises = zeros(T, 2, TT)
-free_energies = zeros(T, TT)
+function infer!(graph::MetaGraph; start_nodes=[:x_0, :γ], time=T, num_iterations=TT)
 
-# Set initial priors
-global x_t = EdgeGaussian("x_0"; mean=params_x0[1], precision=params_x0[2])
-global γ_t = EdgeGamma("γ_0"; shape=params_γ0[1], scale=params_γ0[2])
+	# Start message routine
+	for node in start_nodes
+		act!(graph, node)
+	end
 
-for t = 1:T
+	for t = 1:time
 
-      # Report progress
-      if mod(t, T/10) == 1
-          println("At iteration "*string(t)*"/"*string(T))
-      end
+		# Report progress
+		if mod(t, time/10) == 1
+		  println("At iteration "*string(t)*"/"*string(time))
+		end
 
-      # Previous state
-      global x_tmin = EdgeGaussian("x_tmin", mean=x_t.mean, precision=x_t.precision, block=true)
+		# Start clock for reactions
+		for tt = 1:num_iterations
 
-      # Previous process noise
-      global γ_tmin = EdgeGamma("γ_tmin", shape=γ_t.shape, scale=γ_t.scale, block=true)
-
-      # Process noise equality node
-      global e_γ = NodeEquality("e_γ", edges=["γ_tmin", "γ_t"])
-
-      # State transition node
-      global g_t = TransitionGaussian("g_t", edge_mean="x_tmin", edge_data="x_t", edge_transition=gain, edge_precision="γ_t")
-
-      # Current process noise
-      global γ_t = EdgeGamma("γ_t")
-
-      # Current state
-      global x_t = EdgeGaussian("x_t")
-
-      # Observation likelihood node
-      global f_t = LikelihoodGaussian("f_t", edge_mean="x_t", edge_data="y_t", edge_precision=inv(measurement_noise))
-
-      # Observation edge
-      global y_t = EdgeDelta("y_t", observation=observed[t])
-
-      # Start message routine
-      act(x_tmin, belief(x_tmin), 1e3, graph);
-      act(γ_tmin, belief(γ_tmin), 1e3, graph);
-      act(y_t, belief(y_t), 1e3, graph);
-
-      # Start clock for reactions
-      for tt = 1:TT
-      # tt=1
-
-          # Write out estimated state parameters
-          estimated_states[t, 1, tt] = mean(x_t)
-          estimated_states[t, 2, tt] = sqrt(var(x_t))
-          estimated_noises[t, 1, tt] = inv(mean(γ_t))
-          estimated_noises[t, 2, tt] = sqrt(var(γ_t))
-
-          # Iterate over nodes
-          react(e_γ, graph)
-          react(g_t, graph)
-          react(f_t, graph)
-
-          # Iterate over edges
-          react(γ_t, graph)
-          react(x_t, graph)
-
-      end
+			# Iterate over all nodes to react
+			for node in nodes_t(graph, t, include_notime=true) #TODO: parallelize
+				react!(graph, node)
+			end
+		end
+	end
 end
+
+infer!(graph)
 
 CPUtoc()
 
@@ -219,59 +213,57 @@ CPUtoc()
 Visualize experimental results
 """
 
-# Visualize final state estimates over time
-plot(hidden[2:end], color="red", label="states")
-plot!(estimated_states[:,1,end], color="blue", label="estimates")
-plot!(estimated_states[:,1,end],
-      ribbon=[estimated_states[:,2,end], estimated_states[:,2,end]],
-      linewidth=2,
+# Preallocate state vectors
+estimated_states = zeros(T,2)
+energies = zeros(T,)
+
+# Loop over time
+for t = 1:T
+
+	# Loop over nodes in timeslice
+	for node in nodes_t(graph, t)
+
+		# Check for state node
+		if string(node)[1] == 'x'
+
+			# Retrieve object from node
+			node_x = graph[graph[node, :id], :node]
+
+			# Extract moments of marginals
+			estimated_states[t,1] = mean(node_x.marginal)
+			estimated_states[t,2] = sqrt(var(node_x.marginal))
+
+			# Free energy
+			energies[t] = node_x.free_energy
+
+		end
+	end
+end
+
+# Plot estimated states
+scatter(1:T, observed, color="black", label="observations")
+plot!(hidden[2:end], color="red", label="true states")
+plot!(estimated_states[:,1], color="blue", label="inferred")
+plot!(estimated_states[:,1],
+	  ribbon=[estimated_states[:,2], estimated_states[:,2]],
+	  linewidth=2,
       color="blue",
       fillalpha=0.2,
       fillcolor="blue",
-      label="")
-scatter!(observed, color="black", markersize=3, label="observations")
+	  label="")
 xlabel!("time (t)")
-title!("State estimates, q(x_t)")
-savefig(pwd()*"/experiment_infer-processnoise/viz/experiment_state_estimates.png")
+savefig(joinpath(@__DIR__, "viz/state_estimates_experiment.png"))
 
-# Visualize final noise estimates over time
-plot(process_noise*ones(T,1), color="black", label="true process noise", linewidth=2)
-plot!(estimated_noises[:,1,end], color="blue", label="estimates")
-plot!(estimated_noises[:,1,end],
-      ribbon=[estimated_noises[:,2,end], estimated_noises[:,2,end]],
-      linewidth=2,
-      color="blue",
-      fillalpha=0.2,
-      fillcolor="blue",
-      label="")
+# Plot estimated process noise
+x_range = 0.05:0.02:4
+plot(x_range, pdf.(graph[graph[:γ, :id], :node].marginal, x_range), color="blue", label="posterior")
+vline!([inv(process_noise)], color="red", label="true")
+xlabel!("process noise (γ⁻¹)")
+ylabel!("p(γ⁻¹)")
+savefig(joinpath(@__DIR__, "viz/process-noise_estimates_experiment.png"))
+
+# Plot free energy
+plot(1:T, energies, color="green", label="")
 xlabel!("time (t)")
-title!("Noise estimates, q(γ_t)")
-savefig(pwd()*"/experiment_infer-processnoise/viz/experiment_noise_estimates.png")
-
-# Visualize state belief parameter trajectory
-t = Integer(T/2)
-plot(estimated_states[t,1,1:end], color="blue", label="q(x_"*string(t)*")")
-plot!(estimated_states[t,1,1:end],
-      ribbon=[estimated_states[t,2,1:end], estimated_states[t,2,1:end]],
-      linewidth=2,
-      color="blue",
-      fillalpha=0.2,
-      fillcolor="blue",
-      label="")
-xlabel!("iterations")
-title!("Parameter trajectory of q(x_t) for t="*string(t))
-savefig(pwd()*"/experiment_infer-processnoise/viz/state_parameter_trajectory_t" * string(t) * ".png")
-
-# Visualize noise belief parameter trajectory
-t = Integer(T/2)
-plot(estimated_noises[t,1,1:end], color="blue", label="q(γ_"*string(t)*")")
-plot!(estimated_noises[t,1,1:end],
-      ribbon=[estimated_noises[t,2,1:end], estimated_noises[t,2,1:end]],
-      linewidth=2,
-      color="blue",
-      fillalpha=0.2,
-      fillcolor="blue",
-      label="")
-xlabel!("iterations")
-title!("Parameter trajectory of q(γ_t) for t="*string(t))
-savefig(pwd()*"/experiment_infer-processnoise/viz/noise_parameter_trajectory_t" * string(t) * ".png")
+ylabel!("free energy (F)")
+savefig(joinpath(@__DIR__, "viz/free_energy_experiment.png"))

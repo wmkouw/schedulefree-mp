@@ -114,7 +114,8 @@ for tt = 1:TT
         estimated_states[t,2,tt] = sqrt(var(marginals_mf[:s_*t]))
     end
 
-    global F_mf[tt] = freeEnergyMF(data, marginals_mf)
+    # Free energy
+    F_mf[tt] = freeEnergyMF(data, marginals_mf)
 end
 
 CPUtoc()
@@ -124,7 +125,8 @@ Visualize experimental results
 """
 
 # Visualize final estimates over time
-plot(hidden[2:end], color="red", label="states")
+scatter(1:T, observed, color="black", label="observations")
+plot!(hidden[2:end], color="red", label="states")
 plot!(estimated_states[:,1,end], color="blue", label="estimates")
 plot!(estimated_states[:,1,end],
       ribbon=[estimated_states[:,2,end], estimated_states[:,2,end]],
@@ -133,5 +135,11 @@ plot!(estimated_states[:,1,end],
       fillalpha=0.2,
       fillcolor="blue",
       label="")
-scatter!(observed, color="black", label="observations")
+xlabel!("time (t)")
 savefig(joinpath(@__DIR__, "viz/state_estimates_baseline.png"))
+
+# Visualize free energy
+plot(1:TT, F_mf, color="green", label="")
+xlabel!("number of VMP iterations")
+ylabel!("free energy (F)")
+savefig(joinpath(@__DIR__, "viz/free_energy_baseline.png"))

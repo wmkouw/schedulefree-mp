@@ -1,9 +1,9 @@
-export NodeEquality
+export FactorEquality
 
 using DataStructures: Queue, enqueue!, dequeue!
 include("../util.jl")
 
-mutable struct NodeEquality
+mutable struct FactorEquality
     """
     Equality node.
 
@@ -26,7 +26,7 @@ mutable struct NodeEquality
     beliefs::Dict{String, Any}
     energies::Dict{String, Float64}
 
-    function NodeEquality(id; time=0, edges=[])
+    function FactorEquality(id; time=0, edges=[])
 
         # Keep track of recognition distributions
         connected_edges = Dict{String, String}()
@@ -53,13 +53,13 @@ mutable struct NodeEquality
     end
 end
 
-function energy(node::NodeEquality)
+function energy(node::FactorEquality)
     "Pass on energy from incoming messages."
     # Return the sum of stored energies
     return sum([node.energies[key] for key in keys(node.energies)])
 end
 
-function grad_energy(node::NodeEquality, edge_id::String)
+function grad_energy(node::FactorEquality, edge_id::String)
     "Pass on energy gradients from other connected nodes."
     #TODO (probably via Automatic Differentiation)
     # Find set of other edges
@@ -68,7 +68,7 @@ function grad_energy(node::NodeEquality, edge_id::String)
     return 1.0, 1.0
 end
 
-function message(node::NodeEquality, edge_id::String)
+function message(node::FactorEquality, edge_id::String)
     """
     Pass on messages from other edges.
 
@@ -90,7 +90,7 @@ function message(node::NodeEquality, edge_id::String)
     return outgoing_message
 end
 
-function act(node::NodeEquality, edge_id::String, graph::MetaGraph)
+function act(node::FactorEquality, edge_id::String, graph::MetaGraph)
     "Send out message for one of the connecting edges"
 
     # Compute message for a particular edge
@@ -109,7 +109,7 @@ function act(node::NodeEquality, edge_id::String, graph::MetaGraph)
     return Nothing
 end
 
-function react(node::NodeEquality, graph::MetaGraph)
+function react(node::FactorEquality, graph::MetaGraph)
     "React to incoming messages from edges"
 
     # Find edges attached to node
