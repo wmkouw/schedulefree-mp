@@ -1,8 +1,9 @@
-# Reactive message-passing in linear Gaussian dynamical system
+# Reactive message-passing in a linear Gaussian dynamical system
 # Experiment to infer states
+# Termination based on local Free Energy
 #
 # Wouter Kouw, BIASlab
-# 02-01-2020
+# 26-03-2020
 
 using Random
 using Revise
@@ -101,37 +102,34 @@ let
 
 	for t = 1:T
 
-		# Cast current time to string
-		t_ = string(t)
-
 		# State transition node
-		props_gt = Dict(:id => Symbol("g_"*t_),
+		props_gt = Dict(:id => :g_*t,
 					    :time => t,
-					    :node => FactorGaussian(Symbol("g_"*t_),
-									            out=Symbol("x_"*t_),
-		                                        mean=Symbol("x_"*string(t-1)),
+					    :node => FactorGaussian(:g_*t,
+									            out=:x_*t,
+		                                        mean=:x_*(t-1),
 		                                        precision=inv(process_noise),
 		                                        transition=gain))
 
 		# Current state
-		props_xt = Dict(:id => Symbol("x_"*t_),
+		props_xt = Dict(:id => :x_*t,
 					    :time => t,
-					    :node => VarGaussian(Symbol("x_"*t_), time=t))
+					    :node => VarGaussian(:x_*t, time=t))
 
 		# Observation likelihood node
-		props_ft = Dict(:id => Symbol("f_"*t_),
+		props_ft = Dict(:id => :f_*t,
 					    :time => t,
-					    :node => FactorGaussian(Symbol("f_"*t_),
-			 						            out=Symbol("y_"*t_),
-			 							        mean=Symbol("x_"*t_),
+					    :node => FactorGaussian(:f_*t,
+			 						            out=:y_*t,
+			 							        mean=:x_*t,
 			 							        precision=inv(measurement_noise),
 			 							        transition=emission,
 			 							        time=t))
 
 		# Observation
-		props_yt = Dict(:id => Symbol("y_"*t_),
+		props_yt = Dict(:id => :y_*t,
 					    :time => t,
-					    :node => VarDelta(Symbol("y_"*t_), observed[t], time=t))
+					    :node => VarDelta(:y_*t, observed[t], time=t))
 
 		# Add properties to nodes in current time-slice
 		set_props!(graph, node_num+1, props_gt)
@@ -157,30 +155,40 @@ set_indexing_prop!(graph, :id)
 Inference: filtering
 """
 
-function infer!(graph::MetaGraph; start_node=:x_0, time=T, num_iterations=TT)
+# Preallocate energy
+F = zeros(T,TT)
 
-	# Start message routine
-	act!(graph, start_node)
+# Start message routine
+act!(graph, :x_0)
 
-	for t = 1:time
+for t = 1:T
 
-		# Report progress
-		if mod(t, time/10) == 1
-		  println("At iteration "*string(t)*"/"*string(time))
-		end
+	# Report progress
+	if mod(t, T/10) == 1
+	  println("At iteration "*string(t)*"/"*string(T))
+	end
 
-		# Start clock for reactions
-		for tt = 1:num_iterations
+	# Start clock for reactions
+	for tt = 1:TT
 
-			# Iterate over all nodes to react
-			for node in nodes_t(graph, t) #TODO: parallelize
-				react!(graph, node)
+		# Iterate over all nodes to react
+		for node in nodes_t(graph, t)
+
+			# Tell node to react
+			react!(graph, node)
+
+			# Check for state variable
+			if string(node)[1] == 'x'
+
+				# Retrieve object from node
+				node_x = graph[graph[node, :id], :node]
+
+				# Collect free energy
+				F[t,tt] = node_x.free_energy
 			end
 		end
 	end
 end
-
-infer!(graph)
 
 CPUtoc()
 
@@ -190,7 +198,6 @@ Visualize experimental results
 
 # Preallocate state vectors
 estimated_states = zeros(T,2)
-energies = zeros(T,)
 
 # Loop over time
 for t = 1:T
@@ -207,10 +214,6 @@ for t = 1:T
 			# Extract moments of marginals
 			estimated_states[t,1] = mean(node_x.marginal)
 			estimated_states[t,2] = sqrt(var(node_x.marginal))
-
-			# Free energy
-			energies[t] = node_x.free_energy
-
 		end
 	end
 end
@@ -227,10 +230,16 @@ plot!(estimated_states[:,1],
       fillcolor="blue",
 	  label="")
 xlabel!("time (t)")
-savefig(joinpath(@__DIR__, "viz/state_estimates_experiment.png"))
+savefig(joinpath(@__DIR__, "viz/exp-fixnumiter_state_estimates.png"))
 
 # Plot free energy
-plot(1:T, energies, color="green", label="")
+plot(1:T, sum(F, dims=2), color="green", label="")
 xlabel!("time (t)")
 ylabel!("free energy (F)")
-savefig(joinpath(@__DIR__, "viz/free_energy_experiment.png"))
+savefig(joinpath(@__DIR__, "viz/exp-fixnumiter_fe-time.png"))
+
+# Plot free energy
+plot(1:TT, sum(F, dims=1)', color="green", label="")
+xlabel!("#iterations")
+ylabel!("free energy (F)")
+savefig(joinpath(@__DIR__, "viz/exp-fixnumiter_fe-iters.png"))

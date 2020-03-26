@@ -74,6 +74,16 @@ function moments(graph::MetaGraph, x::Symbol)
     return moments(graph[graph[x, :id], :node].marginal)
 end
 
+function *(a::Symbol, b::Integer)
+    "Concatenate symbol and integer"
+    return Symbol(string(a)*string(b))
+end
+
+function *(a::Symbol, b::String)
+    "Concatenate symbol and integer"
+    return Symbol(string(a)*b)
+end
+
 function *(px::Normal{Float64}, qx::Normal{Float64})
     "Multiplication of two normal distributions of the same variable."
 

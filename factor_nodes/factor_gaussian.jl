@@ -34,7 +34,7 @@ mutable struct FactorGaussian
 
     # Reaction parameters
     threshold::Float64
-    silent::Bool
+    fired::Bool
 
     # Additional properties
     verbose::Bool
@@ -47,7 +47,7 @@ mutable struct FactorGaussian
                             precision::Union{Float64, Symbol}=1.0,
                             threshold::Float64=0.0,
                             time::Union{Integer,Nothing}=0,
-                            silent::Bool=false,
+                            fired::Bool=false,
                             verbose::Bool=false)
 
         # Keep track of recognition distributions
@@ -58,7 +58,7 @@ mutable struct FactorGaussian
                                                          "precision" => precision)
 
         # Construct instance
-        return new(id, variables, time, threshold, silent, verbose)
+        return new(id, variables, time, threshold, fired, verbose)
     end
 end
 
@@ -119,6 +119,9 @@ end
 function react!(graph::MetaGraph, node::FactorGaussian)
     "React to incoming messages from edges."
 
+    # Keep track of whether node fired
+    node.fired = false
+
     # Set of variable ids
     var_ids = Set{Symbol}([x for x in values(node.variables) if isa(x, Symbol)])
 
@@ -137,6 +140,9 @@ function react!(graph::MetaGraph, node::FactorGaussian)
                 # Pass message to other variable
                 act!(graph, node, other_var)
             end
+
+            # Record that node has fired
+            node.fired = true
         end
     end
 end

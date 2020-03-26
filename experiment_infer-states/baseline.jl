@@ -136,10 +136,10 @@ plot!(estimated_states[:,1,end],
       fillcolor="blue",
       label="")
 xlabel!("time (t)")
-savefig(joinpath(@__DIR__, "viz/state_estimates_baseline.png"))
+savefig(joinpath(@__DIR__, "viz/baseline_state_estimates.png"))
 
 # Visualize free energy
 plot(1:TT, F_mf, color="green", label="")
-xlabel!("number of VMP iterations")
+xlabel!("#iterations")
 ylabel!("free energy (F)")
-savefig(joinpath(@__DIR__, "viz/free_energy_baseline.png"))
+savefig(joinpath(@__DIR__, "viz/baseline_fe-iters.png"))
