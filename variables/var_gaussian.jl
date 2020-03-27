@@ -2,7 +2,7 @@ export VarGaussian
 
 import LinearAlgebra: norm
 import Distributions: Normal, mean, std, var, params
-include("../util.jl")
+include(joinpath(@__DIR__, "../util.jl"))
 
 mutable struct VarGaussian
     """Variable with a Gaussian recognition distribution"""

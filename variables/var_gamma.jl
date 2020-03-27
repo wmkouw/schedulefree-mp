@@ -3,7 +3,7 @@ export VarGamma
 import LinearAlgebra: norm
 import Distributions: Gamma, mean, std, var, params
 import SpecialFunctions: gamma, digamma, polygamma
-include("../util.jl")
+include(joinpath(@__DIR__, "../util.jl"))
 
 mutable struct VarGamma
     """Variable with a Gamma recognition distribution"""

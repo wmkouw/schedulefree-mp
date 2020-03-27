@@ -35,9 +35,9 @@ struct Flat <: ContinuousUnivariateDistribution
     Non-informative (flat) prior distribution.
 
     This is an improper prior that treats each element of its sample space as
-    equally likely. Here, this object is used as an identity function for
-    multiplication with other probability distrbutions. In other words:
-    Flat(x) ⋅ Normal(x | 0,1) = Normal(x | 0,1).
+    equally likely. It is used as an identity function for multiplication with
+    other probability distrbutions. In other words:
+        Flat(x) ⋅ Normal(x | 0,1) = Normal(x | 0,1).
     """
     Flat() = new()
 end
@@ -125,6 +125,10 @@ function *(px::Gamma{Float64}, qx::Gamma{Float64})
     return Gamma(new_shape, new_scale)
 end
 
+function *(px::Flat, qx::Flat)
+    return Flat()
+end
+
 function *(px::Union{Gamma{Float64},Normal{Float64}}, qx::Flat)
     "Multiplication of a distribution with a flat distribution."
     return px
@@ -157,12 +161,12 @@ end
 
 function expectation(q::Union{Gamma{Float64},Normal{Float64}}, ν::Flat)
     "If the message is a flat distribution, the integral E_q(x) [log ν(x)] diverges."
-    return 0
+    return Inf
 end
 
 function expectation(ν::Flat, q::Union{Gamma{Float64},Normal{Float64}})
     "If the message is a flat distribution, the integral E_q(x) [log ν(x)] diverges."
-    return 0
+    return Inf
 end
 
 function grad_expectation(q::Normal{Float64}, ν::Normal{Float64})
@@ -199,12 +203,12 @@ end
 
 function grad_expectation(q::Union{Gamma{Float64},Normal{Float64}}, ν::Flat)
     "The gradient of a diverging integral, diverges."
-    return (0, 0)
+    return (Inf, Inf)
 end
 
 function grad_expectation(ν::Flat, q::Union{Gamma{Float64},Normal{Float64}})
     "The gradient of a diverging integral, diverges."
-    return (0, 0)
+    return (Inf, Inf)
 end
 
 """Graph-based utility functions"""

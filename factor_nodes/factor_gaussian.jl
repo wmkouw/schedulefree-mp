@@ -2,7 +2,7 @@ export FactorGaussian
 
 import Distributions: Normal, Gamma, mean, std, var, params
 import DataStructures: Queue, enqueue!, dequeue!
-include("../util.jl")
+include(joinpath(@__DIR__, "../util.jl"))
 
 mutable struct FactorGaussian
     """

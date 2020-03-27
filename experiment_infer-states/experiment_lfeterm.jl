@@ -16,13 +16,13 @@ using Plots
 pyplot()
 
 # Factor graph components
-include("../factor_nodes/factor_gaussian.jl")
-include("../variables/var_gaussian.jl")
-include("../variables/var_delta.jl")
-include("../util.jl")
+include(joinpath(@__DIR__, "../factor_nodes/factor_gaussian.jl"))
+include(joinpath(@__DIR__, "../variables/var_gaussian.jl"))
+include(joinpath(@__DIR__, "../variables/var_delta.jl"))
+include(joinpath(@__DIR__, "../util.jl"))
 
 # Data
-include("../gen_data.jl")
+include(joinpath(@__DIR__, "../gen_data.jl"))
 
 """
 Experiment parameters
@@ -35,7 +35,7 @@ T = 50
 TT = 10
 
 # Free Energy threshold
-fe_threshold = 1e-3
+fe_threshold = 1.
 
 # Known transition and observation matrices
 gain = 0.8
@@ -113,7 +113,8 @@ let
 									            out=:x_*t,
 		                                        mean=:x_*(t-1),
 		                                        precision=inv(process_noise),
-		                                        transition=gain))
+		                                        transition=gain,
+												threshold=fe_threshold))
 
 		# Current state
 		props_xt = Dict(:id => :x_*t,
@@ -123,13 +124,13 @@ let
 		# Observation likelihood node
 		props_ft = Dict(:id => :f_*t,
 					    :time => t,
-						:threshold => fe_threshold,
 					    :node => FactorGaussian(:f_*t,
 			 						            out=:y_*t,
 			 							        mean=:x_*t,
 			 							        precision=inv(measurement_noise),
 			 							        transition=emission,
-			 							        time=t))
+			 							        time=t,
+												threshold=fe_threshold))
 
 		# Observation
 		props_yt = Dict(:id => :y_*t,
@@ -212,7 +213,7 @@ for t = 1:T
 				node_f = graph[graph[node, :id], :node]
 
 				# Record whether node has fired
-				if !node_f.fired
+				if node_f.fired == false
 					println("now")
 				end
 				nodes_fired |= node_f.fired

@@ -16,13 +16,15 @@ using Plots
 pyplot()
 
 # Factor graph components
-include("../factor_nodes/factor_gaussian.jl")
-include("../variables/var_gaussian.jl")
-include("../variables/var_delta.jl")
-include("../util.jl")
+include(joinpath(@__DIR__, "../factor_nodes/factor_gaussian.jl"))
+include(joinpath(@__DIR__, "../factor_nodes/factor_gamma.jl"))
+include(joinpath(@__DIR__, "../variables/var_gaussian.jl"))
+include(joinpath(@__DIR__, "../variables/var_gamma.jl"))
+include(joinpath(@__DIR__, "../variables/var_delta.jl"))
+include(joinpath(@__DIR__, "../util.jl"))
 
 # Data
-include("../gen_data.jl")
+include(joinpath(@__DIR__, "../gen_data.jl"))
 
 """
 Experiment parameters

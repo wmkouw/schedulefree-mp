@@ -1,7 +1,7 @@
 export FactorEquality
 
 using DataStructures: Queue, enqueue!, dequeue!
-include("../util.jl")
+include(joinpath(@__DIR__, "../util.jl"))
 
 mutable struct FactorEquality
     """

@@ -13,7 +13,7 @@ using Plots
 pyplot()
 
 # Functions for generating data
-include("../gen_data.jl")
+include(joinpath(@__DIR__, "../gen_data.jl"))
 
 """
 Experiment parameters
