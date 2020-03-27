@@ -161,7 +161,7 @@ Inference: filtering
 """
 
 # Preallocate energy
-LFE = Vector{Float64}(undef,T)
+LFE = Vector{Array{Float64,1}}(undef,T)
 
 # Start message routine
 act!(graph, :x_0)
@@ -175,16 +175,16 @@ for t = 1:T
 
 	# Start clock for reactions
 	tt = 0
-	LFE_t = []
+	# LFE_t = Array{Float64,1}[]
 	nodes_fired = true
-	while nodes_fired
+	while nodes_fired | tt <= 10
 
 		# Tick up
 		tt += 1
 		# Report progress
-		if mod(tt, 10) == 1
-		  println("Iteration "*string(tt))
-		end
+		# if mod(tt, 10) == 1
+	  	println("Iteration "*string(tt))
+		# end
 
 		# Re-start node fired check
 		nodes_fired = false
@@ -195,16 +195,16 @@ for t = 1:T
 			# Tell node to react
 			react!(graph, node)
 
-			# Check for state variable
-			if string(node)[1] == 'x'
-
-				# Retrieve object from node
-				node_x = graph[graph[node, :id], :node]
-
-				# Collect free energy
-				push!(LFE_t, node_x.free_energy)
-			end
-
+			# # Check for state variable
+			# if string(node)[1] == 'x'
+			#
+			# 	# Retrieve object from node
+			# 	node_x = graph[graph[node, :id], :node]
+			#
+			# 	# Collect free energy
+			# 	push!(LFE_t, node_x.free_energy)
+			# end
+			#
 			# Check for factor node
 			if (string(node)[1] == 'g') | (string(node)[1] == 'f')
 
@@ -212,13 +212,17 @@ for t = 1:T
 				node_f = graph[graph[node, :id], :node]
 
 				# Record whether node has fired
+				if !node_f.fired
+					println("now")
+				end
 				nodes_fired |= node_f.fired
+				# println(nodes_fired)
 			end
 		end
 	end
 
 	# Record LFE
-	LFE[t] = LFE_t
+	# LFE[t] = LFE_t
 end
 
 CPUtoc()

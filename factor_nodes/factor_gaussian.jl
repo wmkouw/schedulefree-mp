@@ -143,6 +143,8 @@ function react!(graph::MetaGraph, node::FactorGaussian)
 
             # Record that node has fired
             node.fired = true
+        else
+            println("grad below threshold")
         end
     end
 end
