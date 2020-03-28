@@ -2,6 +2,8 @@ export VarGaussian
 
 import LinearAlgebra: norm
 import Distributions: Normal, mean, std, var, params
+include(joinpath(@__DIR__, "../prob_operations.jl"))
+include(joinpath(@__DIR__, "../graph_operations.jl"))
 include(joinpath(@__DIR__, "../util.jl"))
 
 mutable struct VarGaussian

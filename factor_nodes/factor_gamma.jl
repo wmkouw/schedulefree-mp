@@ -3,6 +3,8 @@ export FactorGamma
 using Distributions: Gamma, params, mean
 using DataStructures: Queue, enqueue!, dequeue!
 using SpecialFunctions: gamma, digamma
+include(joinpath(@__DIR__, "../prob_operations.jl"))
+include(joinpath(@__DIR__, "../graph_operations.jl"))
 include(joinpath(@__DIR__, "../util.jl"))
 
 mutable struct FactorGamma

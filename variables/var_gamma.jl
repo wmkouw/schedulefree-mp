@@ -3,6 +3,8 @@ export VarGamma
 import LinearAlgebra: norm
 import Distributions: Gamma, mean, std, var, params
 import SpecialFunctions: gamma, digamma, polygamma
+include(joinpath(@__DIR__, "../prob_operations.jl"))
+include(joinpath(@__DIR__, "../graph_operations.jl"))
 include(joinpath(@__DIR__, "../util.jl"))
 
 mutable struct VarGamma

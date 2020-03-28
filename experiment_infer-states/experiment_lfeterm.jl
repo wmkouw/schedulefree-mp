@@ -19,6 +19,8 @@ pyplot()
 include(joinpath(@__DIR__, "../factor_nodes/factor_gaussian.jl"))
 include(joinpath(@__DIR__, "../variables/var_gaussian.jl"))
 include(joinpath(@__DIR__, "../variables/var_delta.jl"))
+include(joinpath(@__DIR__, "../prob_operations.jl"))
+include(joinpath(@__DIR__, "../graph_operations.jl"))
 include(joinpath(@__DIR__, "../util.jl"))
 
 # Data
