@@ -6,9 +6,7 @@
 # 26-03-2020
 
 using Random
-using Revise
 using Distributions
-using DataStructures
 using LightGraphs
 using MetaGraphs
 using CPUTime
@@ -37,7 +35,7 @@ T = 50
 TT = 10
 
 # Free Energy threshold
-fe_threshold = 1.
+fe_threshold = 1e-3
 
 # Known transition and observation matrices
 gain = 0.8
@@ -170,7 +168,7 @@ LFE = Vector{Array{Float64,1}}(undef,T)
 # Start message routine
 act!(graph, :x_0)
 
-for t = 1:1
+for t = 1:T
 
 	# Report progress
 	if mod(t, T/5) == 1
@@ -178,22 +176,12 @@ for t = 1:1
 	end
 
 	# Start clock for reactions
-	tt = 0
 	LFE_t = Float64[]
 	nodes_fired = true
-	while nodes_fired | (tt <= 10)
-
-		# Tick up
-		tt += 1
-		# Report progress
-		# if mod(tt, 10) == 1
-	  	# println("Iteration "*string(tt))
-		# end
+	while nodes_fired
 
 		# Re-start node fired check
 		nodes_fired = false
-
-		# Force state transition node to act
 
 		# Iterate over all nodes to react
 		for node_id in nodes_t(graph, t)
@@ -214,12 +202,8 @@ for t = 1:1
 			# Check for factor node
 			if typeof(node) == FactorGaussian
 
-				# Record whether node has fired
-				if node.fired == false
-					println("now")
-				end
+				# Record whether node fired
 				nodes_fired |= node.fired
-				# println(nodes_fired)
 			end
 		end
 	end
@@ -231,34 +215,46 @@ end
 CPUtoc()
 
 """
-Visualize experimental results
+Get estimates from graph
 """
 
 # Preallocate state vectors
 estimated_states = zeros(T,2)
 F = zeros(T,)
+A = zeros(T,)
 
 # Loop over time
 for t = 1:T
 
 	# Loop over nodes in timeslice
-	for node in nodes_t(graph, t)
+	for node_id in nodes_t(graph, t)
+
+		# Retrieve object from node
+		node = graph[graph[node_id, :id], :node]
 
 		# Check for state node
-		if string(node)[1] == 'x'
-
-			# Retrieve object from node
-			node_x = graph[graph[node, :id], :node]
+		if typeof(node) == VarGaussian
 
 			# Extract moments of marginals
-			estimated_states[t,1] = mean(node_x.marginal)
-			estimated_states[t,2] = sqrt(var(node_x.marginal))
+			estimated_states[t,1] = mean(node.marginal)
+			estimated_states[t,2] = sqrt(var(node.marginal))
 
 			# Track final FE
-			F[t] = node_x.free_energy
+			F[t] = node.free_energy
+		end
+
+		# Check for state node
+		if typeof(node) == VarDelta
+
+			# Track final accuracy (logpdf of observation under message)
+			A[t] = node.pred_error
 		end
 	end
 end
+
+"""
+Visualize experimental results
+"""
 
 # Plot estimated states
 scatter(1:T, observed, color="black", label="observations")
@@ -279,3 +275,9 @@ plot(1:T, F, color="green", label="")
 xlabel!("time (t)")
 ylabel!("free energy (F)")
 savefig(joinpath(@__DIR__, "viz/exp-lfeterm_fe-time.png"))
+
+# Plot accuracy
+plot(1:T, A, color="green", label="")
+xlabel!("time (t)")
+ylabel!("logpdf(ν,x)")
+savefig(joinpath(@__DIR__, "viz/exp-lfeterm_acc-time.png"))

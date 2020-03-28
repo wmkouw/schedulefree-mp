@@ -1,7 +1,6 @@
 export FactorGaussian
 
-import Distributions: Normal, Gamma, mean, std, var, params
-import DataStructures: Queue, enqueue!, dequeue!
+
 include(joinpath(@__DIR__, "../prob_operations.jl"))
 include(joinpath(@__DIR__, "../graph_operations.jl"))
 include(joinpath(@__DIR__, "../util.jl"))
@@ -67,12 +66,12 @@ end
 function message(graph::MetaGraph, node::FactorGaussian, var_id::Symbol)
     "Compute a message to an edge."
 
-    # Moments of variables
-    Ex, Vx = moments(graph, node.variables["out"])
-    Em, Vm = moments(graph, node.variables["mean"])
-    Ea, Va = moments(graph, node.variables["transition"])
-    Eu, Vu = moments(graph, node.variables["control"])
-    Eγ, Vγ = moments(graph, node.variables["precision"])
+    # Extract means and variances of beliefs
+    Ex, Vx = meanvar(graph, node.variables["out"])
+    Em, Vm = meanvar(graph, node.variables["mean"])
+    Ea, Va = meanvar(graph, node.variables["transition"])
+    Eu, Vu = meanvar(graph, node.variables["control"])
+    Eγ, Vγ = meanvar(graph, node.variables["precision"])
 
     # Find which variable belongs to var_id
     var_name = key_from_value(node.variables, var_id)
@@ -145,8 +144,6 @@ function react!(graph::MetaGraph, node::FactorGaussian)
 
             # Record that node has fired
             node.fired = true
-        else
-            println("grad below threshold")
         end
     end
 end

@@ -9,7 +9,8 @@ export Delta
 
 import Base: *
 import Statistics: mean, var
-import Distributions: ContinuousUnivariateDistribution
+import Distributions: params, pdf, logpdf
+# import Distributions: ContinuousUnivariateDistribution
 
 struct Delta <: ContinuousUnivariateDistribution
     """
@@ -32,11 +33,15 @@ function mean(d::Delta)
     return d.value
 end
 
+function std(d::Delta)
+    return 0.0
+end
+
 function var(d::Delta)
     return 0.0
 end
 
-function moments(d::Delta)
+function meanvar(d::Delta)
     return mean(d), var(d)
 end
 
@@ -71,28 +76,38 @@ function var(d::Flat)
     return Inf
 end
 
-function moments(p::Flat)
+function meanvar(p::Flat)
     return mean(p), var(p)
 end
 
-function moments(p::Normal)
-    "First two moments of a Normal distribution."
+function meanvar(p::Normal)
+    "Mean and variance of a Normal distribution."
     return mean(p), var(p)
 end
 
-function moments(p::Gamma)
-    "First two moments of a Gamma distribution."
+# function pdf(p::Normal, x::Float64)
+#     "Probability of sample under Normal distribution."
+#     return 1/sqrt(2*π*var(p))*exp(-(x-mean(p))^2/(2*var(p)))
+# end
+#
+# function logpdf(p::Normal, x::Float64)
+#     "Probability of sample under Normal distribution."
+#     return -log(2*π)/2 - log(std(p)) -(x-mean(p))^2/(2*var(p))
+# end
+
+function meanvar(p::Gamma)
+    "Mean and variance of a Gamma distribution."
     return mean(p), var(p)
 end
 
-function moments(graph::MetaGraph, x::Float64)
+function meanvar(graph::MetaGraph, x::Float64)
     "If variable is clamped to a value, then return that value with variance 0."
     return x, 0
 end
 
-function moments(graph::MetaGraph, x::Symbol)
-    "Extract marginal from variable in graph and return moments."
-    return moments(graph[graph[x, :id], :node].marginal)
+function meanvar(graph::MetaGraph, x::Symbol)
+    "Extract marginal from variable in graph and return mean and variance."
+    return meanvar(graph[graph[x, :id], :node].marginal)
 end
 
 function *(a::Symbol, b::Integer)

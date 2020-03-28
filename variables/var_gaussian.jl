@@ -1,7 +1,6 @@
 export VarGaussian
 
 import LinearAlgebra: norm
-import Distributions: Normal, mean, std, var, params
 include(joinpath(@__DIR__, "../prob_operations.jl"))
 include(joinpath(@__DIR__, "../graph_operations.jl"))
 include(joinpath(@__DIR__, "../util.jl"))
@@ -41,14 +40,14 @@ function mean(variable::VarGaussian)
     return mean(variable.marginal)
 end
 
+function std(variable::VarGaussian)
+    "Standard deviation of current belief"
+    return std(variable.marginal)
+end
+
 function var(variable::VarGaussian)
     "Variance of current belief"
     return var(variable.marginal)
-end
-
-function moments(variable::VarGaussian)
-    "First two moments of current belief"
-    return mean(variable), var(variable)
 end
 
 function update!(graph::AbstractMetaGraph, variable::VarGaussian)

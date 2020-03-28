@@ -1,6 +1,5 @@
 export VarDelta
 
-using Distributions: Normal, logpdf
 
 mutable struct VarDelta
     """
@@ -54,7 +53,7 @@ function prediction_error!(graph::MetaGraph, variable::VarDelta)
 		message_f2v = get_prop(graph, edge, :message_factor2var)
 
 		# Compute and add prediction error
-		variable.pred_error += -logpdf(message_f2v, mean(variable.marginal))
+		variable.pred_error += logpdf(message_f2v, mean(variable.marginal))
 	end
 end
 
