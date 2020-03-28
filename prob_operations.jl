@@ -28,18 +28,6 @@ struct Delta <: ContinuousUnivariateDistribution
     end
 end
 
-struct Flat <: ContinuousUnivariateDistribution
-    """
-    Non-informative (flat) prior distribution.
-
-    This is an improper prior that treats each element of its sample space as
-    equally likely. It is used as an identity function for multiplication with
-    other probability distrbutions. In other words:
-        Flat(x) ⋅ Normal(x | 0,1) = Normal(x | 0,1).
-    """
-    Flat() = new()
-end
-
 function mean(d::Delta)
     return d.value
 end
@@ -50,6 +38,41 @@ end
 
 function moments(d::Delta)
     return mean(d), var(d)
+end
+
+struct Flat <: ContinuousUnivariateDistribution
+    """
+    Non-informative (flat) prior distribution.
+
+    This is an improper prior that treats each element of its sample space as
+    equally likely. It is used as an identity function for multiplication with
+    other probability distrbutions. In other words:
+        Flat(x) ⋅ Normal(x | 0,1) = Normal(x | 0,1).
+
+    # TODO: Flat can be replaced by Uniform(-Inf, Inf)
+    """
+    Flat() = new()
+end
+
+function pdf(p::Flat, x::Float64)
+    "Assuming sample space of Flat is [-Inf, Inf]"
+    return 0.0
+end
+
+function logpdf(p::Flat, x::Float64)
+    return log(pdf(p, x))
+end
+
+function mean(d::Flat)
+    return 0.0
+end
+
+function var(d::Flat)
+    return Inf
+end
+
+function moments(p::Flat)
+    return mean(p), var(p)
 end
 
 function moments(p::Normal)

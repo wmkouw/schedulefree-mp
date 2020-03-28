@@ -13,9 +13,8 @@ mutable struct VarDelta
     time::Union{Integer,Nothing}
     block::Bool
 
-    # Free energy fields
-    free_energy::Float64
-    grad_free_energy::Tuple{Float64,Float64}
+    # Keep track of prediction error
+    pred_error::Float64
 
     function VarDelta(id::Symbol,
 					  observed_value::Float64;
@@ -25,7 +24,10 @@ mutable struct VarDelta
         # Cast observed value to Delta distrbution
         marginal = Delta(observed_value)
 
-        return new(id, marginal, time, block)
+		# Initialize prediction error
+		pred_error = Inf
+
+        return new(id, marginal, time, block, pred_error)
     end
 end
 
@@ -39,21 +41,21 @@ function gradient_entropy(variable::VarDelta)
     return 0.0
 end
 
-function free_energy(graph::MetaGraph, variable::VarDelta)
-    "Free energy at observation node is node energy evaluated at observation."
-	#TODO
-    return 0.
-end
+function prediction_error!(graph::MetaGraph, variable::VarDelta)
+    "Compute prediction error of observation"
 
-function grad_free_energy(graph::MetaGraph, variable::VarDelta)
-    "Free energy at observation node is node energy evaluated at observation."
-	#TODO
-    return Inf, Inf
-end
+	# Reset prediction error
+	variable.pred_error = 0
 
-function prediction_error(variable::VarDelta, message)
-    "Compute precision-weighted prediction error"
-    return -logpdf(message, variable.observation)
+	# Iterate over edges connected to observed variable node
+	for edge in edges(graph, graph[variable.id, :id])
+
+		# Extract message from factor to variable
+		message_f2v = get_prop(graph, edge, :message_factor2var)
+
+		# Compute and add prediction error
+		variable.pred_error += -logpdf(message_f2v, mean(variable.marginal))
+	end
 end
 
 function belief(variable::VarDelta)
@@ -69,7 +71,7 @@ function act!(graph::MetaGraph, variable::VarDelta)
 
         # Check for incoming
 		set_prop!(graph, edge, :message_var2factor, variable.marginal)
-		set_prop!(graph, edge, :∇free_energy, norm(variable.grad_free_energy))
+		set_prop!(graph, edge, :∇free_energy, variable.pred_error)
     end
 end
 
@@ -77,10 +79,7 @@ function react!(graph::MetaGraph, variable::VarDelta)
     "React to incoming messages"
 
     # Compute local free energy
-    variable.free_energy = free_energy(graph, variable)
-
-    # Compute gradient of free energy
-    variable.grad_free_energy = grad_free_energy(graph, variable)
+    prediction_error!(graph, variable)
 
     # Message from edge to nodes
     act!(graph, variable)

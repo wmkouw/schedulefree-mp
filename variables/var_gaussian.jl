@@ -15,14 +15,14 @@ mutable struct VarGaussian
     block::Bool
 
     # Recognition distribution parameters
-    marginal::Normal{Float64}
+    marginal::Union{Flat,Normal{Float64}}
     free_energy::Float64
     grad_free_energy::Tuple{Float64,Float64}
 
     function VarGaussian(id::Symbol;
-                         marginal::Normal{Float64}=Normal(0,1e12),
-                         grad_free_energy::Tuple{Float64,Float64}=(1e12,1e12),
-                         free_energy::Float64=1e12,
+                         marginal::Union{Flat,Normal{Float64}}=Normal(0,1e12),
+                         grad_free_energy::Tuple{Float64,Float64}=(0.,0.),
+                         free_energy::Float64=0.,
                          time::Union{Integer,Nothing}=0,
                          block::Bool=false)
 
@@ -64,11 +64,15 @@ function update!(graph::AbstractMetaGraph, variable::VarGaussian)
 		message_f2v = get_prop(graph, edge, :message_factor2var)
 
         # Check for incoming
-        push!(incoming, message_f2v)
+		if typeof(message_f2v) != Flat
+        	push!(incoming, message_f2v)
+		end
     end
 
     # Update marginal
-    variable.marginal = prod(incoming)
+	if length(incoming) > 0
+    	variable.marginal = prod(incoming)
+	end
 end
 
 function marginal(variable::VarGaussian)
@@ -110,7 +114,9 @@ function free_energy(graph::MetaGraph, variable::VarGaussian)
 		message_f2v = get_prop(graph, edge, :message_factor2var)
 
 		# Compute the expectation E_qx [log ν(x)]
-		U += expectation(variable.marginal, message_f2v)
+		if typeof(message_f2v) != Flat
+			U += expectation(variable.marginal, message_f2v)
+		end
 	end
 
 	# Entropy
@@ -132,12 +138,16 @@ function grad_free_energy(graph::MetaGraph, variable::VarGaussian)
 		# Extract message from factor to variable
 		message_f2v = get_prop(graph, edge, :message_factor2var)
 
-		# Compute the gradient of expectation E_qx [log p(x)] w.r.t. qx params
-		partials = grad_expectation(variable.marginal, message_f2v)
+		# Ignore flat messages
+		if typeof(message_f2v) != Flat
 
-		# Update partial parameters
-		partial_μ += partials[1]
-		partial_σ += partials[2]
+			# Gradient of expectation E_qx [log p(x)] w.r.t. qx params
+			partials = grad_expectation(variable.marginal, message_f2v)
+
+			# Update partial parameters
+			partial_μ += partials[1]
+			partial_σ += partials[2]
+		end
 	end
 
 	# Gradient of entropy

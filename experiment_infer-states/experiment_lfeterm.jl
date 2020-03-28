@@ -105,6 +105,7 @@ let
 	# Start node numbering
 	node_num = 1
 
+	# Build whole graph (ie all t)
 	for t = 1:T
 
 		# State transition node
@@ -169,63 +170,62 @@ LFE = Vector{Array{Float64,1}}(undef,T)
 # Start message routine
 act!(graph, :x_0)
 
-for t = 1:T
+for t = 1:1
 
 	# Report progress
-	if mod(t, T/10) == 1
+	if mod(t, T/5) == 1
 	  println("At iteration "*string(t)*"/"*string(T))
 	end
 
 	# Start clock for reactions
 	tt = 0
-	# LFE_t = Array{Float64,1}[]
+	LFE_t = Float64[]
 	nodes_fired = true
-	while nodes_fired | tt <= 10
+	while nodes_fired | (tt <= 10)
 
 		# Tick up
 		tt += 1
 		# Report progress
 		# if mod(tt, 10) == 1
-	  	println("Iteration "*string(tt))
+	  	# println("Iteration "*string(tt))
 		# end
 
 		# Re-start node fired check
 		nodes_fired = false
 
+		# Force state transition node to act
+
 		# Iterate over all nodes to react
-		for node in nodes_t(graph, t)
+		for node_id in nodes_t(graph, t)
+
+			# Retrieve object from node
+			node = graph[graph[node_id, :id], :node]
 
 			# Tell node to react
-			react!(graph, node)
+			react!(graph, node_id)
 
-			# # Check for state variable
-			# if string(node)[1] == 'x'
-			#
-			# 	# Retrieve object from node
-			# 	node_x = graph[graph[node, :id], :node]
-			#
-			# 	# Collect free energy
-			# 	push!(LFE_t, node_x.free_energy)
-			# end
-			#
+			# Check for state variable
+			if typeof(node) == VarGaussian
+
+				# Collect free energy
+				push!(LFE_t, node.free_energy)
+			end
+
 			# Check for factor node
-			if (string(node)[1] == 'g') | (string(node)[1] == 'f')
-
-				# Retrieve object from node
-				node_f = graph[graph[node, :id], :node]
+			if typeof(node) == FactorGaussian
 
 				# Record whether node has fired
-				if node_f.fired == false
+				if node.fired == false
 					println("now")
 				end
-				nodes_fired |= node_f.fired
+				nodes_fired |= node.fired
 				# println(nodes_fired)
 			end
 		end
 	end
 
 	# Record LFE
-	# LFE[t] = LFE_t
+	LFE[t] = LFE_t
 end
 
 CPUtoc()
