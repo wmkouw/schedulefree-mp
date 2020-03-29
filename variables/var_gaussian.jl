@@ -16,17 +16,17 @@ mutable struct VarGaussian
     # Recognition distribution parameters
     marginal::Union{Flat,Normal{Float64}}
     free_energy::Float64
-    grad_free_energy::Tuple{Float64,Float64}
+    Δfree_energy::Float64
 
     function VarGaussian(id::Symbol;
                          marginal::Union{Flat,Normal{Float64}}=Normal(0,1e12),
-                         grad_free_energy::Tuple{Float64,Float64}=(0.,0.),
                          free_energy::Float64=0.,
+                         Δfree_energy::Float64=0.,
                          time::Union{Integer,Nothing}=0,
                          block::Bool=false)
 
         # Construct instance
-        return new(id, time, block, marginal, free_energy, grad_free_energy)
+        return new(id, time, block, marginal, free_energy, Δfree_energy)
     end
 end
 
@@ -68,9 +68,21 @@ function update!(graph::AbstractMetaGraph, variable::VarGaussian)
 		end
     end
 
-    # Update marginal
+	# If no new messages arrived, keep existing marginal
 	if length(incoming) > 0
+
+		# Update marginal as product of incoming messages
     	variable.marginal = prod(incoming)
+
+		# Keep old free energy
+		free_energy_old = variable.free_energy
+
+		# Compute free energy after update
+		variable.free_energy = free_energy(graph, variable)
+
+		# Compute gradient of free energy after update
+		# variable.Δfree_energy = norm(grad_free_energy(graph, variable))
+		variable.Δfree_energy = norm(free_energy_old - variable.free_energy)
 	end
 end
 
@@ -167,7 +179,7 @@ function act!(graph::MetaGraph, variable::VarGaussian)
 
         # Check for incoming
 		set_prop!(graph, edge, :message_var2factor, variable.marginal)
-		set_prop!(graph, edge, :∇free_energy, norm(variable.grad_free_energy))
+		set_prop!(graph, edge, :Δfree_energy, variable.Δfree_energy)
     end
 end
 
@@ -179,12 +191,6 @@ function react!(graph::MetaGraph, variable::VarGaussian)
 
         # Update variational distribution
         update!(graph, variable)
-
-        # Compute free energy after update
-        variable.free_energy = free_energy(graph, variable)
-
-        # Compute gradient of free energy after update
-        variable.grad_free_energy = grad_free_energy(graph, variable)
 
         # Message from edge to nodes
         act!(graph, variable)

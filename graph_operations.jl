@@ -61,7 +61,7 @@ function add_edge!(graph::AbstractMetaGraph,
                    edge::Tuple{Int64, Int64};
                    message_factor2var::UnivariateDistribution=Flat(),
                    message_var2factor::UnivariateDistribution=Flat(),
-                   ∇free_energy::Float64=0.)
+                   Δfree_energy::Float64=0.)
     "Overload add_edge! to initialize message and belief dictionaries."
 
     if (edge[1] >= 1) & (edge[2] >= 1)
@@ -75,7 +75,7 @@ function add_edge!(graph::AbstractMetaGraph,
         # Add message and belief dictionaries to edge
         set_prop!(graph, edge_id, :message_var2factor, message_var2factor)
         set_prop!(graph, edge_id, :message_factor2var, message_factor2var)
-        set_prop!(graph, edge_id, :∇free_energy, ∇free_energy)
+        set_prop!(graph, edge_id, :Δfree_energy, Δfree_energy)
     end
 end
 

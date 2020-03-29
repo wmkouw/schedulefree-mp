@@ -6,9 +6,7 @@
 # 26-03-2020
 
 using Random
-using Revise
 using Distributions
-using DataStructures
 using LightGraphs
 using MetaGraphs
 using CPUTime
@@ -36,7 +34,7 @@ Experiment parameters
 T = 50
 
 # Reaction-time clock
-TT = 10
+TT = 20
 
 # Known transition and observation matrices
 gain = 0.8

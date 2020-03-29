@@ -10,8 +10,6 @@ using Distributions
 using LightGraphs
 using MetaGraphs
 using CPUTime
-using Plots
-pyplot()
 
 # Factor graph components
 include(joinpath(@__DIR__, "../factor_nodes/factor_gaussian.jl"))
@@ -171,17 +169,24 @@ act!(graph, :x_0)
 for t = 1:T
 
 	# Report progress
-	if mod(t, T/5) == 1
-	  println("At iteration "*string(t)*"/"*string(T))
-	end
+	# if mod(t, T/5) == 1
+  	println("At iteration "*string(t)*"/"*string(T))
+	# end
+
+	# Fire state transiton from previous time-point
+	act!(graph, graph[graph[:g_*t, :id], :node], :x_*t)
 
 	# Start clock for reactions
+	tt = 0
 	LFE_t = Float64[]
 	nodes_fired = true
-	while nodes_fired
+	while nodes_fired | (tt <= 3)
 
 		# Re-start node fired check
 		nodes_fired = false
+
+		# Count iterations
+		tt += 1
 
 		# Iterate over all nodes to react
 		for node_id in nodes_t(graph, t)
@@ -256,6 +261,9 @@ end
 Visualize experimental results
 """
 
+using Plots
+pyplot()
+
 # Plot estimated states
 scatter(1:T, observed, color="black", label="observations")
 plot!(hidden[2:end], color="red", label="true states")
@@ -279,5 +287,5 @@ savefig(joinpath(@__DIR__, "viz/exp-lfeterm_fe-time.png"))
 # Plot accuracy
 plot(1:T, A, color="green", label="")
 xlabel!("time (t)")
-ylabel!("logpdf(ν,x)")
+ylabel!("wpred err (-log μ(x))")
 savefig(joinpath(@__DIR__, "viz/exp-lfeterm_acc-time.png"))

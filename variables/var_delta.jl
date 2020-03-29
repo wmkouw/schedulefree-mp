@@ -14,6 +14,7 @@ mutable struct VarDelta
 
     # Keep track of prediction error
     pred_error::Float64
+	Δpred_error::Float64
 
     function VarDelta(id::Symbol,
 					  observed_value::Float64;
@@ -25,8 +26,9 @@ mutable struct VarDelta
 
 		# Initialize prediction error
 		pred_error = Inf
+		Δpred_error = Inf
 
-        return new(id, marginal, time, block, pred_error)
+        return new(id, marginal, time, block, pred_error, Δpred_error)
     end
 end
 
@@ -44,17 +46,19 @@ function prediction_error!(graph::MetaGraph, variable::VarDelta)
     "Compute prediction error of observation"
 
 	# Reset prediction error
-	variable.pred_error = 0
+	pred_error_old = variable.pred_error
 
-	# Iterate over edges connected to observed variable node
-	for edge in edges(graph, graph[variable.id, :id])
+	# Find edge connected to node
+	edge = edges(graph, graph[variable.id, :id])[1]
 
-		# Extract message from factor to variable
-		message_f2v = get_prop(graph, edge, :message_factor2var)
+	# Extract message from factor to variable
+	message_f2v = get_prop(graph, edge, :message_factor2var)
 
-		# Compute and add prediction error
-		variable.pred_error += logpdf(message_f2v, mean(variable.marginal))
-	end
+	# Compute and add prediction error
+	variable.pred_error = -logpdf(message_f2v, mean(variable.marginal))
+
+	# Compute change in prediction error
+	variable.Δpred_error = norm(pred_error_old - variable.pred_error)
 end
 
 function belief(variable::VarDelta)
@@ -70,7 +74,7 @@ function act!(graph::MetaGraph, variable::VarDelta)
 
         # Check for incoming
 		set_prop!(graph, edge, :message_var2factor, variable.marginal)
-		set_prop!(graph, edge, :∇free_energy, variable.pred_error)
+		set_prop!(graph, edge, :Δfree_energy, variable.Δpred_error)
     end
 end
 

@@ -133,7 +133,7 @@ function react!(graph::MetaGraph, node::FactorGaussian)
         edge = Edge(graph[var_id, :id], graph[node.id, :id])
 
         # If change in FE is large enough, record variable as updated
-        if get_prop(graph, edge, :∇free_energy) >= node.threshold
+        if get_prop(graph, edge, :Δfree_energy) >= node.threshold
 
             # Loop over other variables
             for other_var in setdiff(var_ids, [var_id])
